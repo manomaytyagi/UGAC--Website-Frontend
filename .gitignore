@@ -1,0 +1,8 @@
+Docs/
+node_modules/
+.env
+dist/
+build/
+__pycache__/
+.venv/
+images/

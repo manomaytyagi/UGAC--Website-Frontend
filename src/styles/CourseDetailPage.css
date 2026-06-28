@@ -1,0 +1,42 @@
+/* =====================================================================
+   CourseDetailPage — extracted from inline CSS template literal
+   Colours:
+     #0d1b3e  navy-deep
+     #1e3a6e  navy-mid
+     #2e509e  navy-light
+     #ee9116  orange
+     #edebe7  off-white
+     #dce3f0  border
+     #5a6a8a  text-muted
+     #8a9abc  text-dim
+     #101935  ink
+   ===================================================================== */
+
+/* ── Keyframes ── */
+@keyframes rise  { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .45 } }
+
+/* ── Focus ── */
+.ucd-page *:focus-visible {
+  outline: 2px solid #ee9116;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* ── Input transitions ── */
+.ucd-page textarea,
+.ucd-page input[type="text"] {
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ucd-page textarea:focus,
+.ucd-page input:focus {
+  border-color: #2e509e;
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .ucd-page * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
