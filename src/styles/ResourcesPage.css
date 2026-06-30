@@ -1,8 +1,3 @@
-/* =====================================================================
-   ResourcesPage — extracted from inline CSS template literal
-   Colours: #ee9116 orange
-   ===================================================================== */
-
 @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .5 } }
 @keyframes rise  { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
 
@@ -20,4 +15,179 @@
   .uc-resources * {
     animation: none !important;
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   INTERNSHIP PROCEDURE — interactive flowchart
+   ════════════════════════════════════════════════════════════════════════ */
+@keyframes fcDraw { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+@keyframes fcFade { from { opacity: 0; transform: translate(-50%,-50%) scale(.9) }
+                    to   { opacity: 1; transform: translate(-50%,-50%) scale(1) } }
+@keyframes fcPop  { from { opacity: 0 } to { opacity: 1 } }
+
+.uc-fc-outer { max-width: 780px; margin: 0 auto; }
+
+/* intro banner */
+.uc-fc-intro {
+  background: linear-gradient(135deg, #0d1b3e, #1e3a6e);
+  color: #fff; border-radius: 16px; padding: 24px 26px;
+  margin-bottom: 30px; box-shadow: 0 8px 28px rgba(13,27,62,.18);
+}
+.uc-fc-intro-eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: 2.2px;
+  text-transform: uppercase; color: #ee9116; margin: 0 0 8px;
+}
+.uc-fc-intro-title {
+  font-size: clamp(20px,3.5vw,26px); font-weight: 800;
+  letter-spacing: -.5px; margin: 0 0 10px; line-height: 1.25;
+}
+.uc-fc-intro-text { font-size: 14px; line-height: 1.65; color: #c5d2ec; margin: 0; }
+
+/* canvas holds the SVG connectors (behind) + the node column (front) */
+.uc-fc-canvas { position: relative; }
+.uc-fc-svg    { position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: visible; }
+
+.uc-fc-line {
+  fill: none; stroke: #9fb0cf; stroke-width: 2.4px; stroke-linecap: round;
+  stroke-dasharray: 1; animation: fcDraw .6s ease forwards;
+}
+
+/* branch label sitting on a connector (e.g. "6 Months · Semester") */
+.uc-fc-branch {
+  position: absolute; transform: translate(-50%,-50%);
+  background: #fff; border: 1px solid #dce3f0; color: #5a6a8a;
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+  white-space: nowrap; z-index: 2; pointer-events: none;
+  box-shadow: 0 1px 4px rgba(13,27,62,.06); animation: fcFade .4s ease both;
+}
+
+/* vertical column of nodes */
+.uc-fc-column {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 58px;
+  padding: 4px 0;
+}
+.uc-fc-slot { display: flex; justify-content: center; width: 100%; }
+
+.uc-fc-node { animation: fcPop .45s ease both; }
+.uc-fc-node.is-click { cursor: pointer; transition: transform .15s, filter .15s; }
+.uc-fc-node.is-click:hover { transform: translateY(-2px); filter: brightness(1.02); }
+
+/* start pill */
+.uc-fc-start {
+  background: #fff7ed; border: 2px solid #ee9116; color: #9a4f08;
+  font-weight: 800; font-size: 15px; border-radius: 999px;
+  padding: 14px 26px; text-align: center; box-shadow: 0 6px 18px rgba(238,145,22,.18);
+}
+
+/* decision diamond */
+.uc-fc-diamond {
+  position: relative; width: 150px; height: 150px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.uc-fc-diamond-bg {
+  position: absolute; inset: 14.6%; border: 2px solid; border-radius: 16px;
+  transform: rotate(45deg); box-shadow: 0 6px 18px rgba(13,27,62,.10);
+}
+.uc-fc-diamond.is-active .uc-fc-diamond-bg { box-shadow: 0 0 0 5px rgba(238,145,22,.16), 0 8px 22px rgba(13,27,62,.14); }
+.uc-fc-diamond-label {
+  position: relative; z-index: 1; max-width: 74%; text-align: center;
+  font-size: 13px; font-weight: 800; color: #6b3d09; line-height: 1.25;
+}
+
+/* action / email box */
+.uc-fc-box {
+  border: 2px solid; border-radius: 14px; padding: 15px 18px;
+  width: min(320px,86vw); box-shadow: 0 4px 14px rgba(13,27,62,.07);
+  display: flex; flex-direction: column;
+}
+.uc-fc-box.is-active { box-shadow: 0 10px 26px rgba(13,27,62,.14); }
+.uc-fc-box-tag {
+  font-size: 10px; font-weight: 800; letter-spacing: .6px;
+  text-transform: uppercase; margin-bottom: 5px;
+}
+.uc-fc-box-title { font-size: 15px; font-weight: 800; color: #101935; margin: 0 0 4px; line-height: 1.3; }
+.uc-fc-box-meta  { font-size: 12.5px; font-weight: 700; color: #1e3a6e; margin: 2px 0 0; }
+.uc-fc-box-body  { font-size: 13px; line-height: 1.6; color: #5a6a8a; margin: 6px 0 0; }
+
+.uc-fc-mailwrap {
+  margin-top: 11px; background: rgba(255,255,255,.7); border: 1px solid #d6e2f7;
+  border-radius: 9px; padding: 9px 11px; display: flex; flex-direction: column; gap: 6px;
+}
+.uc-fc-mailrow   { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.uc-fc-mail-label{ font-size: 11px; font-weight: 800; color: #8a9abc; width: 18px; flex-shrink: 0; }
+.uc-fc-mail      { font-size: 13px; font-weight: 700; color: #1d4ed8; text-decoration: none; word-break: break-all; }
+.uc-flow-mail:hover { text-decoration: underline; }
+
+.uc-fc-attach {
+  margin-top: 11px; background: rgba(255,251,235,.85); border: 1px solid #fde68a;
+  border-radius: 9px; padding: 9px 12px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+}
+.uc-fc-attach-label { font-size: 11px; font-weight: 800; color: #a06210; }
+.uc-fc-attach-item  {
+  font-size: 12px; font-weight: 700; color: #854d0e;
+  background: #fff; border: 1px solid #fde68a; border-radius: 6px; padding: 2px 8px;
+}
+
+/* done pill */
+.uc-fc-done {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
+  background: #f0fdf4; border: 2px solid #15803d; border-radius: 999px;
+  padding: 12px 24px; max-width: 320px; text-align: center;
+}
+.uc-fc-done-tag  { font-size: 15px; font-weight: 800; color: #15803d; }
+.uc-fc-done-body { font-size: 12.5px; font-weight: 600; color: #3f7a52; line-height: 1.5; }
+
+/* note (no-intern) box */
+.uc-fc-notebox {
+  background: #faf5ff; border: 2px dashed #c084fc; border-radius: 14px;
+  padding: 16px 20px; width: min(340px,86vw); text-align: center;
+}
+.uc-fc-note-title { font-size: 15px; font-weight: 800; color: #7e22ce; margin: 0 0 6px; }
+.uc-fc-note-body  { font-size: 13px; line-height: 1.6; color: #6b3f96; margin: 0; }
+
+/* option buttons fanning out from the active diamond */
+.uc-fc-fan {
+  display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;
+  margin-top: 34px; width: 100%; max-width: 440px;
+}
+.uc-fc-opt {
+  flex: 1 1 0; min-width: 130px; border-radius: 12px; padding: 13px 18px;
+  font-size: 14px; font-weight: 800; cursor: pointer; font-family: inherit;
+  transition: transform .12s, box-shadow .15s, background .15s; animation: fcPop .4s ease both;
+}
+.uc-fc-opt[data-variant="primary"] {
+  background: #ee9116; color: #fff; border: 2px solid transparent;
+  box-shadow: 0 6px 16px rgba(238,145,22,.28);
+}
+.uc-fc-opt[data-variant="ghost"] {
+  background: #fff; color: #1e3a6e; border: 2px solid #dce3f0;
+}
+.uc-fc-opt:hover  { transform: translateY(-2px); }
+.uc-fc-opt:active { transform: translateY(0); }
+
+/* controls */
+.uc-fc-controls {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  justify-content: center; margin-top: 34px;
+}
+.uc-flow-ctrl {
+  background: #fff; border: 1px solid #dce3f0; border-radius: 8px;
+  padding: 9px 16px; font-size: 13px; font-weight: 700; color: #1e3a6e;
+  cursor: pointer; font-family: inherit; transition: border-color .15s, background .15s;
+}
+.uc-flow-ctrl:hover { border-color: #ee9116; background: #fffaf3; }
+.uc-fc-hint { font-size: 12.5px; color: #8a9abc; }
+
+/* mobile */
+@media (max-width: 560px) {
+  .uc-fc-column   { gap: 50px; }
+  .uc-fc-diamond  { width: 132px; height: 132px; }
+  .uc-fc-diamond-label { font-size: 12px; }
+  .uc-fc-opt      { flex: 1 1 100%; }
+}
+
+/* reduced motion: keep curves drawn, drop the animation */
+@media (prefers-reduced-motion: reduce) {
+  .uc-fc-line { stroke-dashoffset: 0 !important; animation: none !important; }
 }

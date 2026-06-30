@@ -2,6 +2,18 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { apiFetch } from "../lib/apiBridge";
 import "../styles/TeamPage.css";
 
+// Hook: returns true when viewport width ≤ 560px
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth <= 560);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 560px)");
+    const handler = (e) => setMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return mobile;
+}
+
 // Page Colors
 const C = {
   navyDeep:  "#0d1b3e",
@@ -135,6 +147,7 @@ function Contacts({ member, accent = C.navyLight, large = false, onDark = false,
 
 // 3 Screens - Leadership, Branch, Support- snaps on after scroll
 function LeadershipScreen({ secretary, branches }) {
+  const mobile = useIsMobile();
   return (
     <div className="tm-screen tm-leadership">
       <div className="tm-screen-head">
@@ -155,11 +168,14 @@ function LeadershipScreen({ secretary, branches }) {
             <span className="tm-eyebrow tm-eyebrow--orange">{secretary.role}</span>
             <h2 className="tm-spotlight-name">{secretary.name}</h2>
             <p className="tm-spotlight-desc">{secretary.description}</p>
+            {mobile && <Contacts member={secretary} compact onDark />}
           </div>
-          <div className="tm-spotlight-contacts">
-            <span className="tm-badge">Tier 1</span>
-            <Contacts member={secretary} large onDark />
-          </div>
+          {!mobile && (
+            <div className="tm-spotlight-contacts">
+              <span className="tm-badge">Tier 1</span>
+              <Contacts member={secretary} large onDark />
+            </div>
+          )}
         </div>
       </div>
 
@@ -248,6 +264,7 @@ function SupportScreen({ teams }) {
 
 //Branch Page and Switching Logic
 function BranchPage({ branch, branches, onSwitch, onBack }) {
+  const mobile = useIsMobile();
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onBack();
     document.addEventListener("keydown", onKey);
@@ -258,7 +275,7 @@ function BranchPage({ branch, branches, onSwitch, onBack }) {
   return (
     <div className="tm-branchpage" style={{ "--c": c, "--cbg": tint(c, 0.08), "--cbd": tint(c, 0.32) }}>
       <header className="tm-bp-head">
-        <button className="tm-back" onClick={onBack}>← Branches</button>
+        <button className="tm-back" onClick={onBack} aria-label="Back to Branches">←</button>
         <span className="tm-branch-code tm-branch-code--lg" style={{ background: c }}>{branch.code}</span>
         <div>
           <span className="tm-eyebrow" style={{ color: c }}>Branch team</span>
@@ -274,7 +291,7 @@ function BranchPage({ branch, branches, onSwitch, onBack }) {
             <div>
               <span className="tm-eyebrow tm-eyebrow--white">Councillor</span>
               <h3 className="tm-lead-name">{branch.councillor.name}</h3>
-              <Contacts member={branch.councillor} large onDark />
+              <Contacts member={branch.councillor} large={!mobile} compact={mobile} onDark />
             </div>
           </div>
           <p className="tm-sub-label">Sub-councillors</p>

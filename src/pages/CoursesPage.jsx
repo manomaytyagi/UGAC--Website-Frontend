@@ -55,6 +55,23 @@ function decorateDepts(list) {
   });
 }
 
+// The live API can return extra, loosely-defined rows (research centres,
+// exchange programs, "Institute Core", etc.) that aren't proper departments
+// yet. Until that data is cleaned up, the home picker only shows the 12
+// curated departments (6 + 6) defined in FALLBACK_DEPARTMENTS, matched by
+// id/name/short so we still use live names/colors/counts where available.
+function curatedOnly(depts) {
+  const byKey = {};
+  depts.forEach(d => {
+    [d.id, d.name, d.short].forEach(k => {
+      if (k) byKey[String(k).toLowerCase()] = d;
+    });
+  });
+  return FALLBACK_DEPARTMENTS
+    .map(canon => byKey[canon.id] || byKey[canon.name.toLowerCase()] || byKey[(canon.short || "").toLowerCase()] || canon)
+    .slice(0, 12);
+}
+
 function mk(prefix, dept, rows) {
   return rows.map(([lvl, ser, title, credits, prac]) => ({
     code: `${prefix}${lvl}${String(ser).padStart(2, "0")}${prac ? "P" : ""}`,
@@ -160,6 +177,17 @@ const RAW_COURSES = [
   ]),
 ];
 const FALLBACK_COURSES = RAW_COURSES.map((c, i) => ({ id: i + 1, ...c }));
+
+// Strips dashes, underscores, spaces (and similar separators) and lowercases,
+// so queries like "data-structures", "data structures", and "DataStructures"
+// all match the same way. Also collapses repeated separators and accents.
+function normalize(s) {
+  return (s || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/[-_\s]+/g, "");
+}
 
 function parseCode(code) {
   const s = (code || "").trim();
@@ -276,7 +304,7 @@ function BookFlameEmblem({ size = 300, reduce }) {
   );
 }
 
-function DeptButton({ dept, side, count, onPick }) {
+function DeptButton({ dept, side, count, onPick, density = 1 }) {
   const [hot, setHot] = useState(false);
   const left = side === "left";
   return (
@@ -290,6 +318,8 @@ function DeptButton({ dept, side, count, onPick }) {
       aria-label={`Open ${dept.name} courses`}
       style={{
         ...S.deptBtn,
+        gap: 13 * density,
+        padding: `${12 * density}px ${15 * density}px`,
         flexDirection: left ? "row-reverse" : "row",
         textAlign: left ? "right" : "left",
         borderColor: hot ? dept.color : C.border,
@@ -297,20 +327,20 @@ function DeptButton({ dept, side, count, onPick }) {
         transform: hot ? (left ? "translateX(-4px)" : "translateX(4px)") : "none",
       }}
     >
-      <span style={{ ...S.deptAccent, background: dept.color }} />
+      <span style={{ ...S.deptAccent, width: 4, height: 32 * density, background: dept.color }} />
       <span style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: left ? "flex-end" : "flex-start", minWidth: 0 }}>
-        <span style={S.deptName}>{dept.name}</span>
-        <span style={S.deptMeta}>{dept.short} · {count} course{count === 1 ? "" : "s"}</span>
+        <span style={{ ...S.deptName, fontSize: 15 * density }}>{dept.name}</span>
+        <span style={{ ...S.deptMeta, fontSize: 11.5 * density }}>{dept.short} · {count} course{count === 1 ? "" : "s"}</span>
       </span>
     </button>
   );
 }
 
-function DeptSkeleton({ side }) {
+function DeptSkeleton({ side, density = 1 }) {
   const left = side === "left";
   return (
-    <div style={{ ...S.deptBtn, justifyContent: left ? "flex-end" : "flex-start", animation: "pulse 1.5s ease-in-out infinite" }}>
-      <span style={{ height: 14, width: "62%", background: "#dfe4ee", borderRadius: 6 }} />
+    <div style={{ ...S.deptBtn, padding: `${12 * density}px ${15 * density}px`, justifyContent: left ? "flex-end" : "flex-start", animation: "pulse 1.5s ease-in-out infinite" }}>
+      <span style={{ height: 14 * density, width: "62%", background: "#dfe4ee", borderRadius: 6 }} />
     </div>
   );
 }
@@ -392,6 +422,8 @@ export default function CoursesPage() {
   const [level, setLevel]   = useState("all");
   const [type, setType]     = useState("all");
 
+  const [heroSearch, setHeroSearch] = useState("");
+
   useEffect(() => {
     let wakeTimer;
     const load = async () => {
@@ -406,7 +438,7 @@ export default function CoursesPage() {
       clearTimeout(wakeTimer);
       setApiWaking(false);
 
-      const depts = decorateDepts(deptRes.data);
+      const depts = curatedOnly(decorateDepts(deptRes.data));
       const deptIds = new Set(depts.map(d => d.id));
 
       const liveCourses = (courseRes.data || [])
@@ -439,43 +471,102 @@ export default function CoursesPage() {
     return m;
   }, [courses]);
 
-  const left  = departments.slice(0, 6);
-  const right = departments.slice(6, 12);
+  // departments is capped at 12 (6+6) by curatedOnly, so this split is
+  // normally exactly even; the density scaling below is just a safety net
+  // in case that cap ever changes.
+  const half  = Math.ceil(departments.length / 2);
+  const left  = departments.slice(0, half);
+  const right = departments.slice(half);
+  const maxCol = Math.max(left.length, right.length, 6);
+  const deptDensity = Math.min(1, 6 / maxCol);
 
-  const openDept = (d) => { setActiveDept(d); setView("dept"); if (typeof window !== "undefined") window.scrollTo({ top: 0 }); };
+  const openDept = (d) => { setActiveDept(d); setView("dept"); setHeroSearch(""); if (typeof window !== "undefined") window.scrollTo({ top: 0 }); };
+
+  const deptById = useMemo(() => {
+    const m = {};
+    departments.forEach(d => { m[d.id] = d; });
+    return m;
+  }, [departments]);
+
+  const heroResults = useMemo(() => {
+    const q = normalize(heroSearch);
+    if (!q) return [];
+    return courses
+      .filter(c => normalize(c.title).includes(q) || normalize(c.code).includes(q))
+      .slice(0, 8);
+  }, [heroSearch, courses]);
 
   const visible = useMemo(() => {
     if (!activeDept) return [];
-    const q = search.trim().toLowerCase();
+    const q = normalize(search);
     return courses.filter(c => c.dept === activeDept.id)
-      .filter(c => !q || c.title.toLowerCase().includes(q) || c.code.toLowerCase().includes(q))
+      .filter(c => !q || normalize(c.title).includes(q) || normalize(c.code).includes(q))
       .filter(c => cred === "all" || c.credits === Number(cred))
       .filter(c => level === "all" || c.level === Number(level))
       .filter(c => type === "all" || (type === "practical" ? c.practical : !c.practical));
   }, [activeDept, courses, search, cred, level, type]);
 
   const renderHome = (fixed) => {
-    const emblemSize = isDesktop ? "min(300px, 26vw, 36vh)" : 248;
+    const emblemBase = isDesktop ? 300 : 248;
+    const emblemSize = isDesktop
+      ? `min(${Math.round(emblemBase * (0.65 + 0.35 * deptDensity))}px, 26vw, 36vh)`
+      : emblemBase;
     return (
       <div style={fixed ? S.homeColFixed : { ...S.home, animation: reduce ? "none" : "rise .5s ease both" }}>
         <div style={S.topbar}>
-          <button style={S.backBtn} onClick={() => navigate("/")}>← Back</button>
+          <button style={S.backBtn} onClick={() => navigate("/")}>{isDesktop ? "← Back" : "←"}</button>
           <button style={S.linkBtn} onClick={() => navigate("/curriculum")}>View full curriculum →</button>
         </div>
 
         <div style={S.homeHeader}>
           <p style={S.eyebrow}>Academic Resources</p>
           <h1 style={S.pageH1}>Course Catalogue</h1>
-          <p style={S.lede}>Pick a department to open its courses, then filter by credits, level, or practical vs theory.</p>
+        </div>
+
+        <div style={S.heroSearchWrap}>
+          <input
+            style={S.heroSearchInput}
+            placeholder="Search any course by name or code…"
+            value={heroSearch}
+            onChange={(e) => setHeroSearch(e.target.value)}
+            aria-label="Search all courses"
+          />
+          {heroSearch.trim() !== "" && (
+            <div style={S.heroSearchResults}>
+              {heroResults.length > 0 ? (
+                heroResults.map(c => {
+                  const dep = deptById[c.dept];
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      style={S.heroResultRow}
+                      onClick={() => navigate(`/courses/${c.id}`)}
+                    >
+                      <span style={{ ...S.heroResultAccent, background: dep?.color || C.textDim }} />
+                      <span style={S.heroResultText}>
+                        <span style={S.heroResultTitle}>{c.title}</span>
+                        <span style={S.heroResultMeta}>
+                          {c.code} {dep ? `· ${dep.name}` : ""}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <div style={S.heroResultEmpty}>No courses match “{heroSearch}”.</div>
+              )}
+            </div>
+          )}
         </div>
 
         {isDesktop ? (
           <div style={fixed ? S.heroWrapFixed : undefined}>
             <div style={S.heroGrid}>
-              <div style={S.deptCol}>
+              <div style={{ ...S.deptCol, gap: 10 * deptDensity }}>
                 {loading
-                  ? Array.from({ length: 6 }).map((_, i) => <DeptSkeleton key={i} side="left" />)
-                  : left.map(d => <DeptButton key={d.id} dept={d} side="left" count={countByDept[d.id] || 0} onPick={openDept} />)}
+                  ? Array.from({ length: 6 }).map((_, i) => <DeptSkeleton key={i} side="left" density={deptDensity} />)
+                  : left.map(d => <DeptButton key={d.id} dept={d} side="left" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} />)}
               </div>
 
               <div style={S.emblemWrap}>
@@ -483,10 +574,10 @@ export default function CoursesPage() {
                 <p style={S.emblemCaption}>Knowledge, kept alight.</p>
               </div>
 
-              <div style={S.deptCol}>
+              <div style={{ ...S.deptCol, gap: 10 * deptDensity }}>
                 {loading
-                  ? Array.from({ length: 6 }).map((_, i) => <DeptSkeleton key={i} side="right" />)
-                  : right.map(d => <DeptButton key={d.id} dept={d} side="right" count={countByDept[d.id] || 0} onPick={openDept} />)}
+                  ? Array.from({ length: 6 }).map((_, i) => <DeptSkeleton key={i} side="right" density={deptDensity} />)
+                  : right.map(d => <DeptButton key={d.id} dept={d} side="right" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} />)}
               </div>
             </div>
           </div>
@@ -509,10 +600,10 @@ export default function CoursesPage() {
       <div style={{ ...S.accentBar, background: activeDept.color }} />
 
       <div style={S.deptHeader}>
-        <button style={S.backBtn} onClick={() => setView("home")}>← Departments</button>
-        <div>
+        <button style={S.backBtn} onClick={() => setView("home")}>{isDesktop ? "← Departments" : "←"}</button>
+        <div style={{ textAlign: "left" }}>
           <p style={{ ...S.eyebrow, color: activeDept.color }}>{activeDept.short} · Department</p>
-          <h1 style={S.pageH1Sm}>{activeDept.name}</h1>
+          <h1 style={{ ...S.pageH1Sm, textAlign: "left" }}>{activeDept.name}</h1>
         </div>
       </div>
 
@@ -580,9 +671,6 @@ export default function CoursesPage() {
   return (
     <div className="uc-page" style={homeFixed ? S.pageHomeFixed : S.page}>
       {apiWaking && <div style={S.wakeToast}>API is waking up, please wait…</div>}
-      {usingFallback && !loading && (
-        <div style={S.staleBanner}>Showing sample data — live data unavailable.</div>
-      )}
 
       {view === "home" ? renderHome(homeFixed) : renderDept()}
     </div>
@@ -618,12 +706,6 @@ const S = {
     padding: "12px 20px", fontSize: 13, fontWeight: 600,
     boxShadow: "0 4px 20px rgba(13,27,62,0.25)",
   },
-  staleBanner: {
-    maxWidth: 1180, margin: "0 auto 14px", flexShrink: 0,
-    background: tint(C.orange, 0.14), color: C.navyDeep,
-    borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 600,
-    border: `1px solid ${tint(C.orange, 0.3)}`, textAlign: "center",
-  },
   home: { maxWidth: 1180, margin: "0 auto" },
   topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 16, flexShrink: 0 },
   backBtn: {
@@ -639,14 +721,39 @@ const S = {
   eyebrow: { fontSize: 11, fontWeight: 700, letterSpacing: 2.5, textTransform: "uppercase", color: C.orange, margin: "0 0 6px" },
   pageH1: { fontSize: "clamp(28px, 3.8vw, 46px)", fontWeight: 800, letterSpacing: -1.4, color: C.navyDeep, margin: 0, lineHeight: 1.02 },
   pageH1Sm: { fontSize: "clamp(26px, 3.6vw, 38px)", fontWeight: 800, letterSpacing: -1, color: C.navyDeep, margin: 0 },
-  lede: { fontSize: "clamp(13px, 1.3vw, 16px)", color: C.textMuted, margin: "10px auto 0", maxWidth: 440 },
+  heroSearchWrap: {
+    position: "relative", maxWidth: 460, margin: "18px auto 0", width: "100%", flexShrink: 0,
+  },
+  heroSearchInput: {
+    width: "100%", boxSizing: "border-box",
+    border: `1px solid ${C.border}`, borderRadius: 10,
+    padding: "12px 18px", fontSize: 14, color: C.navyDeep,
+    background: C.white, outline: "none", fontFamily: "inherit",
+    boxShadow: "0 2px 8px rgba(13,27,62,0.05)",
+  },
+  heroSearchResults: {
+    position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 50,
+    background: C.white, border: `1px solid ${C.border}`, borderRadius: 10,
+    boxShadow: "0 10px 28px rgba(13,27,62,0.14)", overflow: "hidden",
+    maxHeight: 320, overflowY: "auto",
+  },
+  heroResultRow: {
+    display: "flex", alignItems: "center", gap: 12, width: "100%",
+    background: "none", border: "none", borderBottom: `1px solid ${C.border}`,
+    padding: "10px 16px", cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+  },
+  heroResultAccent: { width: 4, height: 26, borderRadius: 4, flexShrink: 0 },
+  heroResultText: { display: "flex", flexDirection: "column", gap: 2, minWidth: 0 },
+  heroResultTitle: { fontSize: 13.5, fontWeight: 700, color: C.navyDeep },
+  heroResultMeta: { fontSize: 11.5, fontWeight: 600, color: C.textDim, letterSpacing: 0.3 },
+  heroResultEmpty: { padding: "14px 16px", fontSize: 13, color: C.textMuted },
   heroGrid: {
     display: "grid",
     gridTemplateColumns: "minmax(190px, 1fr) auto minmax(190px, 1fr)",
-    alignItems: "center", gap: "clamp(18px, 3.5vw, 52px)",
-    marginTop: 18, width: "100%",
+    alignItems: "stretch", gap: "clamp(18px, 3.5vw, 52px)",
+    marginTop: 18, width: "100%", height: "100%", maxHeight: "100%",
   },
-  deptCol: { display: "flex", flexDirection: "column", gap: 10 },
+  deptCol: { display: "flex", flexDirection: "column", gap: 10, minHeight: 0, justifyContent: "center", overflowY: "auto", maxHeight: "100%" },
   emblemWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10 },
   emblemCaption: { fontSize: 11.5, fontWeight: 600, letterSpacing: 1.4, textTransform: "uppercase", color: C.textDim, margin: 0 },
   heroStack: { display: "flex", flexDirection: "column", alignItems: "center", gap: 26, marginTop: 24 },

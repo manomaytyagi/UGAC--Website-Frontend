@@ -3,6 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/apiBridge.js";
 import "../styles/CurriculumPage.css";
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth <= 560);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 560px)");
+    const h = (e) => setMobile(e.matches);
+    mq.addEventListener("change", h);
+    return () => mq.removeEventListener("change", h);
+  }, []);
+  return mobile;
+}
+
 const C = {
   navyDeep:  "#0d1b3e",
   navyMid:   "#1e3a6e",
@@ -152,27 +163,49 @@ function TableFace({ seatsBranches, onPick, hovered, setHovered, reduce }) {
             <circle cx={seat.x - 5.5} cy={seat.y - 6} r={4.4} fill={tint("#ffffff", isHot ? 0.5 : 0.28)} style={{ pointerEvents: "none" }} />
 
             {}
-            <text
-              x={seat.lx} y={seat.ly}
-              textAnchor={seat.anchor}
-              dominantBaseline={seat.baseline}
-              style={{
-                fontFamily: "'Inter', system-ui, sans-serif",
-                fontSize: 14,
-                fontWeight: isHot ? 800 : 600,
-                fill: isHot ? branch.color : C.textMuted,
-                letterSpacing: 0.2,
-                stroke: C.offWhite,
-                strokeWidth: 3.4,
-                paintOrder: "stroke",
-                strokeLinejoin: "round",
-                transition: reduce ? "none" : "fill .25s ease, font-weight .15s ease",
-                pointerEvents: "none",
-                userSelect: "none",
-              }}
-            >
-              {branch.name}
-            </text>
+            {(() => {
+              const MAX = 18;
+              const name = branch.name;
+              let lines = [name];
+              if (name.length > MAX) {
+                const mid = Math.floor(name.length / 2);
+                let best = -1, bestDist = Infinity;
+                for (let i = 0; i < name.length; i++) {
+                  if (name[i] === " ") {
+                    const d = Math.abs(i - mid);
+                    if (d < bestDist) { bestDist = d; best = i; }
+                  }
+                }
+                if (best > 0) lines = [name.slice(0, best), name.slice(best + 1)];
+              }
+              const lineH = 16;
+              const offsetY = lines.length > 1 ? -(lineH / 2) : 0;
+              return (
+                <text
+                  x={seat.lx} y={seat.ly}
+                  textAnchor={seat.anchor}
+                  dominantBaseline={seat.baseline}
+                  style={{
+                    fontFamily: "'Inter', system-ui, sans-serif",
+                    fontSize: 15,
+                    fontWeight: isHot ? 800 : 700,
+                    fill: isHot ? branch.color : C.ink,
+                    letterSpacing: 0.2,
+                    stroke: C.offWhite,
+                    strokeWidth: 4,
+                    paintOrder: "stroke",
+                    strokeLinejoin: "round",
+                    transition: reduce ? "none" : "fill .25s ease, font-weight .15s ease",
+                    pointerEvents: "none",
+                    userSelect: "none",
+                  }}
+                >
+                  {lines.map((line, li) => (
+                    <tspan key={li} x={seat.lx} dy={li === 0 ? offsetY : lineH}>{line}</tspan>
+                  ))}
+                </text>
+              );
+            })()}
           </g>
         );
       })}
@@ -273,6 +306,7 @@ function CouncilEmblem({ branches, onPick, reduce, big, onHover }) {
 
 function BranchCurriculum({ branch, onBack, reduce }) {
   const navigate = useNavigate();
+  const mobile = useIsMobile();
   const [year, setYear]           = useState(1);
   const [batch, setBatch]         = useState(null);
   const [batches, setBatches]     = useState(FALLBACK_BATCHES);
@@ -305,52 +339,78 @@ function BranchCurriculum({ branch, onBack, reduce }) {
   const displayBatches = batches.length ? batches : FALLBACK_BATCHES;
   const displayBatch   = batch || displayBatches[0];
 
+  // Mobile year/batch tab: compact, no sem subtitle, all fit on one row
+  const mobileTab = {
+    ...S.tab,
+    padding: "8px 4px",
+    minWidth: 0,
+    flex: "1 1 0",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    borderRadius: 10,
+    gap: 0,
+  };
+
   return (
     <div style={{ ...S.branchPage, animation: reduce ? "none" : "fadeUp .4s ease both" }}>
       <div style={{ ...S.accentBar, background: branch.color }} />
-      <div style={S.branchHeader}>
-        <button style={S.backBtn} onClick={onBack}>← All branches</button>
+      <div style={mobile
+        ? { marginBottom: 20, display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }
+        : S.branchHeader
+      }>
+        <button style={S.backBtn} onClick={onBack}>{mobile ? "←" : "← All branches"}</button>
         <div>
           <p style={{ ...S.eyebrow, color: branch.color }}>UGAC · IIT Mandi · Curriculum</p>
-          <h1 style={S.branchH1}>{branch.name}</h1>
+          <h1 style={{ ...S.branchH1, textAlign: "left" }}>{branch.name}</h1>
         </div>
       </div>
 
       {}
-      <div style={S.controlRow}>
-        <div style={S.controlGroup}>
+      <div style={mobile
+        ? { display: "flex", flexDirection: "column", gap: 16, marginBottom: 18 }
+        : S.controlRow
+      }>
+        <div style={mobile
+          ? { display: "flex", flexDirection: "column", gap: 6, width: "100%" }
+          : S.controlGroup
+        }>
           <span style={S.groupLabel}>Year</span>
-          <div style={S.tabRow}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", width: "100%" }}>
             {[1, 2, 3, 4].map((y) => (
               <button
                 key={y}
                 onClick={() => setYear(y)}
                 style={{
-                  ...S.tab,
+                  ...(mobile ? mobileTab : S.tab),
                   ...(year === y ? { ...S.tabActive, borderColor: branch.color, color: branch.color } : {}),
                 }}
               >
                 <span style={S.tabBig}>Year {y}</span>
-                <span style={S.tabSmall}>Sem {y * 2 - 1}–{y * 2}</span>
+                {!mobile && <span style={S.tabSmall}>Sem {y * 2 - 1}–{y * 2}</span>}
               </button>
             ))}
           </div>
         </div>
 
-        <div style={S.controlGroup}>
+        <div style={mobile
+          ? { display: "flex", flexDirection: "column", gap: 6, width: "100%" }
+          : S.controlGroup
+        }>
           <span style={S.groupLabel}>Batch</span>
-          <div style={S.tabRow}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", width: "100%" }}>
             {displayBatches.map((b) => (
               <button
                 key={b}
                 onClick={() => setBatch(b)}
                 style={{
-                  ...S.tab,
+                  ...(mobile ? mobileTab : S.tab),
                   ...(displayBatch === b ? { ...S.tabActive, borderColor: branch.color, color: branch.color } : {}),
                 }}
               >
                 <span style={S.tabBig}>{b}</span>
-                <span style={S.tabSmall}>entry</span>
+                {!mobile && <span style={S.tabSmall}>entry</span>}
               </button>
             ))}
           </div>
@@ -446,7 +506,9 @@ export default function CurriculumPage() {
         <BranchCurriculum branch={active} onBack={() => setActive(null)} reduce={reduce} />
       ) : (
         <div style={{ ...S.landing, animation: reduce ? "none" : "rise .5s ease both" }}>
-          <button style={{ ...S.backBtn, marginBottom: 20 }} onClick={() => navigate("/")}>← Back</button>
+          <button style={{ ...S.backBtn, marginBottom: 20 }} onClick={() => navigate("/")}>
+            {isDesktop ? "← Back" : "←"}
+          </button>
 
           {isDesktop ? (
             <div style={S.heroRow}>

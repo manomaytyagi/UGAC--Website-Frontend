@@ -31,25 +31,25 @@ const FALLBACK = {
       id: "u1", title: "Academic Grievance Open House",
       desc: "An open forum for students to raise academic concerns directly with council members and faculty representatives. All concerns are documented and escalated appropriately.",
       date: "2026-06-28", time: "3:00 PM", venue: "Lecture Hall A",
-      tag: "Open Forum", banner_key: null, form_url: null, report_key: null,
+      tag: "Open Forum", audience: "All Years", banner_key: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQIAC1kBFD8UgsOayMBHWl9pktJkSO1BuY7ZpdVGmLUMg&s=10", form_url: null, report_key: null,
     },
     {
       id: "u2", title: "UGAC Website Launch — v1",
       desc: "Official launch of the UGAC website. Live demo walkthrough, feedback collection from students, and recognition of contributors who built the platform.",
       date: "2026-07-05", time: "5:00 PM", venue: "Main Auditorium",
-      tag: "Launch", banner_key: null, form_url: null, report_key: null,
+      tag: "Launch", audience: "All Years", banner_key: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRHj0r68jZH4eo3fYSF4w2kuacrnLWu69OP644HsnhNkw&s=10", form_url: null, report_key: null,
     },
     {
       id: "u3", title: "Curriculum Feedback Drive",
       desc: "Structured feedback collection from UG students on the current curriculum, grading policies, and course load. Results will be presented to the Academic Office.",
       date: "2026-07-20", time: null, venue: "Online",
-      tag: "Survey", banner_key: null, form_url: null, report_key: null,
+      tag: "Survey", audience: "2nd Year", banner_key: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSHa8idw8HqiJ7I78N3FgMdWef6VHKKiZD3KCmwuw6X7w&s=10", form_url: null, report_key: null,
     },
     {
       id: "u4", title: "Academic Policy Workshop",
       desc: "Interactive workshop where students learn about academic regulations, promotion criteria, grade appeals, and their rights under the UG Academic Regulations 2024.",
       date: "2026-08-10", time: "2:00 PM", venue: "Seminar Room B",
-      tag: "Workshop", banner_key: null, form_url: null, report_key: null,
+      tag: "Workshop", audience: "1st Year", banner_key: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS4ifAPkvjBxGuPA74qvyJBU7TOayHB_eXDuSnNU4YqRw&s=10", form_url: null, report_key: null,
     },
   ],
   past: [
@@ -58,18 +58,33 @@ const FALLBACK = {
       desc: "Introduction to UGAC, council structure, and academic resources available to students. Attended by over 200 undergraduate students.",
       date: "2026-01-08", time: "4:00 PM", venue: "Main Auditorium",
       tag: "Talk", banner_key: null, form_url: null, report_key: null,
+      // --- details shown in the "View Details" popup (replace with your links) ---
+      youtube_url: "https://www.youtube.com/watch?v=LXb3EKWsInQ",
+      canva_url:   "https://www.canva.com/design/DAHN9e-KAEE/KnaIfSW0xG9ivR9_e6rDCQ/view",
+      documents: [
+        { label: "Session Slides (PDF)", url: "https://example.com/kickoff-slides.pdf" },
+        { label: "Attendance Summary",   url: "https://example.com/kickoff-attendance.pdf" },
+      ],
     },
     {
       id: "p2", title: "Grievance Redressal Session — Jan 2026",
       desc: "Monthly open session for students to raise unresolved academic grievances. 12 concerns were formally logged and escalated.",
       date: "2026-01-25", time: "3:30 PM", venue: "Online",
       tag: "Open Forum", banner_key: null, form_url: null, report_key: null,
+      youtube_url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+      canva_url:   null,
+      documents: [],
     },
     {
       id: "p3", title: "Exam Prep Resources Drive",
       desc: "Distribution of curated past papers, notes, and study resources across all branches ahead of end-semester examinations.",
       date: "2026-04-12", time: null, venue: "Online",
       tag: "Other", banner_key: null, form_url: null, report_key: null,
+      youtube_url: null,
+      canva_url:   "https://www.canva.com/design/DAGexample02/view",
+      documents: [
+        { label: "Resource Pack (Drive)", url: "https://example.com/resource-pack" },
+      ],
     },
   ],
 };
@@ -81,16 +96,60 @@ function formatDate(iso) {
 function getDay(iso)   { return new Date(iso).getDate(); }
 function getMonth(iso) { return new Date(iso).toLocaleString("en-IN", { month: "short" }).toUpperCase(); }
 
+/* Detects small viewports so the modal can swap the Canva embed for a link on mobile. */
+function useIsMobile(bp = 640) {
+  const [mobile, setMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth <= bp : false
+  );
+  useEffect(() => {
+    const onResize = () => setMobile(window.innerWidth <= bp);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [bp]);
+  return mobile;
+}
+
+/* Normalise a YouTube watch/short link into an embeddable URL.
+   playsinline=1 is what lets iPhones play inside the iframe instead of
+   refusing to start; rel=0 / modestbranding=1 keep it clean. */
+function toYouTubeEmbed(url) {
+  if (!url) return "";
+  const params = "playsinline=1&rel=0&modestbranding=1";
+  const join = (base) => (base.includes("?") ? `${base}&${params}` : `${base}?${params}`);
+  try {
+    if (url.includes("/embed/")) return join(url);
+    const u = new URL(url);
+    let id = "";
+    if (u.hostname.includes("youtu.be")) id = u.pathname.slice(1);
+    else id = u.searchParams.get("v") || "";
+    if (!id) id = url;
+    return join(`https://www.youtube.com/embed/${id}`);
+  } catch {
+    return join(`https://www.youtube.com/embed/${url}`);
+  }
+}
+
+/* Ensure a Canva /view link carries the ?embed flag so it renders in an iframe. */
+function toCanvaEmbed(url) {
+  if (!url) return "";
+  if (url.includes("?embed") || url.includes("&embed")) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}embed`;
+}
+
 function EventBanner({ bannerKey, title }) {
-  const [url, setUrl]   = useState(null);
-  const [err, setErr]   = useState(false);
+  // If the value is already a full URL, use it directly as the image.
+  const isDirectUrl = typeof bannerKey === "string" && /^https?:\/\//.test(bannerKey);
+
+  const [url, setUrl] = useState(isDirectUrl ? bannerKey : null);
+  const [err, setErr] = useState(false);
 
   useEffect(() => {
-    if (!bannerKey) return;
+    if (!bannerKey || isDirectUrl) return;          // skip the API call for direct URLs
     apiFetch(`/api/v1/events/banner?key=${encodeURIComponent(bannerKey)}`, null)
       .then(res => { if (res?.data?.url) setUrl(res.data.url); })
       .catch(() => {});
-  }, [bannerKey]);
+  }, [bannerKey, isDirectUrl]);
 
   if (!url || err) {
     return (
@@ -123,32 +182,56 @@ function EventCardSkeleton() {
 }
 
 function UpcomingCard({ event }) {
-  const ts = tagStyle(event.tag);
   const isPast = new Date(event.date) < new Date();
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);   // mobile-only reveal toggle
 
   return (
-    <div style={S.card}>
-      {/* Banner */}
-      <div style={S.bannerWrap}>
+    <div
+      className={`uc-up-card${isMobile && open ? " uc-up-open" : ""}`}
+      style={S.upCard}
+      tabIndex={0}
+    >
+      {/* Full-bleed banner (the only thing visible until hover) */}
+      <div style={S.upMedia}>
         <EventBanner bannerKey={event.banner_key} title={event.title} />
-        {/* Date badge */}
-        <div style={S.dateBadge}>
-          <span style={S.dateBadgeDay}>{getDay(event.date)}</span>
-          <span style={S.dateBadgeMonth}>{getMonth(event.date)}</span>
-        </div>
-        {/* Tag */}
-        <span style={{ ...S.cardTag, background: ts.bg, color: ts.color }}>{event.tag}</span>
+        <div style={S.upTopScrim} />
       </div>
 
-      {/* Body */}
-      <div style={S.cardBody}>
-        <h3 style={S.cardTitle}>{event.title}</h3>
-        <p style={S.cardDesc}>{event.desc}</p>
+      {/* Mobile: small tap-to-reveal button on the image */}
+      {isMobile && !open && (
+        <button style={S.upMobileBtn} onClick={() => setOpen(true)}>
+          View Details
+        </button>
+      )}
 
-        <div style={S.cardMeta}>
-          {event.time  && <span style={S.metaItem}>🕐 {event.time}</span>}
-          {event.venue && <span style={S.metaItem}>📍 {event.venue}</span>}
-          <span style={S.metaItem}>📅 {formatDate(event.date)}</span>
+      {/* Always-visible: date badge */}
+      <div style={S.dateBadge}>
+        <span style={S.dateBadgeDay}>{getDay(event.date)}</span>
+        <span style={S.dateBadgeMonth}>{getMonth(event.date)}</span>
+      </div>
+
+      {/* Always-visible: audience / year-program badge (replaces the tag here) */}
+      {event.audience && (
+        <span style={S.audienceBadge}>{event.audience}</span>
+      )}
+
+      {/* Reveal panel: rises on hover (desktop) or via the button (mobile) */}
+      <div className="uc-up-overlay" style={S.upOverlay}>
+        {isMobile && (
+          <button
+            style={S.upCloseBtn}
+            onClick={() => setOpen(false)}
+            aria-label="Hide details"
+          >✕</button>
+        )}
+        <h3 style={S.upTitle}>{event.title}</h3>
+        <p style={S.upDesc}>{event.desc}</p>
+
+        <div style={S.upMeta}>
+          {event.time  && <span style={S.upMetaItem}>🕐 {event.time}</span>}
+          {event.venue && <span style={S.upMetaItem}>📍 {event.venue}</span>}
+          <span style={S.upMetaItem}>📅 {formatDate(event.date)}</span>
         </div>
 
         {event.form_url && !isPast && (
@@ -161,8 +244,11 @@ function UpcomingCard({ event }) {
   );
 }
 
-function PastEventRow({ event }) {
+function PastEventRow({ event, onOpen }) {
   const ts = tagStyle(event.tag);
+  const hasDetails =
+    event.youtube_url || event.canva_url || (event.documents && event.documents.length > 0);
+
   return (
     <div style={S.pastRow}>
       {/* Date block */}
@@ -179,12 +265,126 @@ function PastEventRow({ event }) {
           <h3 style={S.pastTitle}>{event.title}</h3>
           <div style={S.pastBadges}>
             <span style={{ ...S.tagSmall, background: ts.bg, color: ts.color }}>{event.tag}</span>
-            {event.venue && <span style={S.venuePill}>📍 {event.venue}</span>}
           </div>
         </div>
         <p style={S.pastDesc}>{event.desc}</p>
-        {event.report_key && (
-          <ReportDownload fileKey={event.report_key} />
+
+        <div style={S.pastActions}>
+          {event.report_key && <ReportDownload fileKey={event.report_key} />}
+          {hasDetails && (
+            <button style={S.viewDetailsBtn} onClick={() => onOpen(event)}>
+              View Details →
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EventDetailsModal({ event, onClose }) {
+  const isMobile = useIsMobile();
+  const hasVideo = !!event.youtube_url;
+  const hasCanva = !!event.canva_url;
+  const docs     = event.documents || [];
+
+  // Only one medium is shown at a time. Default to the video when present.
+  const [mediaTab, setMediaTab] = useState(hasVideo ? "video" : "canva");
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  return (
+    <div style={S.modalBackdrop} onClick={onClose}>
+      <div
+        style={S.modalBox}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog" aria-modal="true"
+      >
+        {/* Header */}
+        <div style={S.modalHeader}>
+          <div style={{ minWidth: 0 }}>
+            <p style={S.modalEyebrow}>{getMonth(event.date)} {getDay(event.date)} · {event.tag}</p>
+            <h2 style={S.modalTitle}>{event.title}</h2>
+          </div>
+          <button style={S.modalClose} onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        {/* Toggle — only when both media exist (one visible at a time) */}
+        {hasVideo && hasCanva && (
+          <div style={S.mediaToggle}>
+            <button
+              style={{ ...S.mediaToggleBtn, ...(mediaTab === "video" ? S.mediaToggleActive : {}) }}
+              onClick={() => setMediaTab("video")}
+            >▶ Recording</button>
+            <button
+              style={{ ...S.mediaToggleBtn, ...(mediaTab === "canva" ? S.mediaToggleActive : {}) }}
+              onClick={() => setMediaTab("canva")}
+            >🖼 Slides</button>
+          </div>
+        )}
+
+        {/* Media area */}
+        <div style={S.mediaArea}>
+          {mediaTab === "video" && hasVideo && (
+            <div style={S.embedWrap}>
+              <iframe
+                style={S.embedFrame}
+                src={toYouTubeEmbed(event.youtube_url)}
+                title={`${event.title} — recording`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
+          )}
+
+          {mediaTab === "canva" && hasCanva && (
+            isMobile ? (
+              <a
+                href={event.canva_url}
+                target="_blank" rel="noopener noreferrer"
+                style={S.canvaLinkBtn}
+              >
+                🖼 Open slides in Canva ↗
+              </a>
+            ) : (
+              <div style={S.embedWrap}>
+                <iframe
+                  style={S.embedFrame}
+                  src={toCanvaEmbed(event.canva_url)}
+                  title={`${event.title} — slides`}
+                  allow="fullscreen"
+                  allowFullScreen
+                />
+              </div>
+            )
+          )}
+        </div>
+
+        {/* Documents & links */}
+        {docs.length > 0 && (
+          <div style={S.docsSection}>
+            <p style={S.docsHeading}>Documents &amp; Links</p>
+            <div style={S.docsList}>
+              {docs.map((d, i) => (
+                <a
+                  key={i} href={d.url}
+                  target="_blank" rel="noopener noreferrer"
+                  style={S.docLink}
+                >
+                  📎 {d.label} ↗
+                </a>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -225,6 +425,7 @@ export default function EventsPage({ onBack }) {
   const [apiWaking, setApiWaking]     = useState(false);
   const [activeTab, setActiveTab]     = useState("upcoming");
   const [filterTag, setFilterTag]     = useState("All");
+  const [selectedEvent, setSelectedEvent] = useState(null);
 
   useEffect(() => {
     let wakeTimer;
@@ -245,9 +446,10 @@ export default function EventsPage({ onBack }) {
   const upcoming = data?.upcoming || [];
   const past     = data?.past     || [];
 
-  const allTags = ["All", ...new Set([...upcoming, ...past].map(e => e.tag))];
+  // Filters now apply to PAST events only, so the tag list is built from past events.
+  const pastTags = ["All", ...new Set(past.map(e => e.tag))];
 
-  const filteredUpcoming = upcoming.filter(e => filterTag === "All" || e.tag === filterTag);
+  const filteredUpcoming = upcoming;                                  // no filter on upcoming
   const filteredPast     = past.filter(e => filterTag === "All" || e.tag === filterTag);
 
   return (
@@ -261,8 +463,8 @@ export default function EventsPage({ onBack }) {
 
       {/* Header */}
       <div style={S.pageHeader}>
-        <button style={S.backBtn} onClick={onBack}>← Back</button>
-        <div>
+        <button style={S.backBtn} onClick={onBack} aria-label="Back">←</button>
+        <div style={S.headerText}>
           <p style={S.eyebrow}>UGAC · IIT Mandi</p>
           <h1 style={S.pageH1}>Events</h1>
           <p style={S.pageSubtitle}>
@@ -271,17 +473,19 @@ export default function EventsPage({ onBack }) {
         </div>
       </div>
 
-      {/* Tag filter */}
-      <div style={S.filterRow}>
-        {allTags.map(tag => (
-          <button key={tag}
-            style={{ ...S.filterBtn, ...(filterTag === tag ? S.filterBtnActive : {}) }}
-            onClick={() => setFilterTag(tag)}
-          >
-            {tag}
-          </button>
-        ))}
-      </div>
+      {/* Tag filter — PAST events only */}
+      {activeTab === "past" && (
+        <div style={S.filterRow}>
+          {pastTags.map(tag => (
+            <button key={tag}
+              style={{ ...S.filterBtn, ...(filterTag === tag ? S.filterBtnActive : {}) }}
+              onClick={() => setFilterTag(tag)}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={S.tabsWrap}>
@@ -308,7 +512,7 @@ export default function EventsPage({ onBack }) {
           ) : filteredUpcoming.length === 0 ? (
             <div style={S.empty}>
               <p style={S.emptyIcon}>📅</p>
-              <p style={S.emptyText}>No upcoming events{filterTag !== "All" ? ` tagged "${filterTag}"` : ""}.</p>
+              <p style={S.emptyText}>No upcoming events right now.</p>
             </div>
           ) : (
             <div style={S.cardGrid}>
@@ -330,12 +534,17 @@ export default function EventsPage({ onBack }) {
             </div>
           ) : (
             <div style={S.pastList}>
-              {filteredPast.map(e => <PastEventRow key={e.id} event={e} />)}
+              {filteredPast.map(e => <PastEventRow key={e.id} event={e} onOpen={setSelectedEvent} />)}
             </div>
           )
         )}
 
       </div>
+
+      {/* View Details popup */}
+      {selectedEvent && (
+        <EventDetailsModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      )}
     </div>
   );
 }
@@ -359,22 +568,26 @@ const S = {
   },
   pageHeader: {
     maxWidth: 1100, margin: "0 auto 28px",
-    display: "flex", alignItems: "flex-start", gap: 20,
+    display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 18,
   },
+  headerText: { width: "100%" },
   backBtn: {
-    background: C.white, border: `1px solid ${C.border}`, borderRadius: 8,
-    padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600,
-    color: C.navyMid, marginTop: 6, flexShrink: 0, fontFamily: "inherit",
+    background: C.white, border: `1px solid ${C.border}`, borderRadius: 10,
+    width: 40, height: 40, padding: 0,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    cursor: "pointer", fontSize: 19, fontWeight: 700, lineHeight: 1,
+    color: C.navyMid, flexShrink: 0, fontFamily: "inherit",
+    boxShadow: "0 1px 3px rgba(13,27,62,0.06)",
   },
   eyebrow: {
     fontSize: 11, fontWeight: 700, letterSpacing: 2.5,
-    textTransform: "uppercase", color: C.orange, marginBottom: 6, margin: "0 0 6px",
+    textTransform: "uppercase", color: C.orange, margin: "0 0 8px",
   },
   pageH1: {
     fontSize: "clamp(28px, 4vw, 42px)", fontWeight: 800,
-    letterSpacing: -1, color: C.navyDeep, margin: "0 0 6px",
+    letterSpacing: -1, color: C.navyDeep, margin: "0 0 10px", lineHeight: 1.1,
   },
-  pageSubtitle: { fontSize: 14, color: C.textMuted, margin: 0 },
+  pageSubtitle: { fontSize: 14, color: C.textMuted, margin: 0, maxWidth: 560, lineHeight: 1.6 },
 
   filterRow: {
     maxWidth: 1100, margin: "0 auto 24px",
@@ -419,7 +632,58 @@ const S = {
     display: "flex", flexDirection: "column",
   },
 
-  bannerWrap: { position: "relative", height: 140, flexShrink: 0 },
+  /* ── Upcoming card: image-only until hover ───────────────── */
+  upCard: {
+    position: "relative",
+    height: 310,
+    border: `1px solid ${C.border}`,
+    borderRadius: 14,
+    overflow: "hidden",
+    background: C.navyDeep,
+    boxShadow: "0 2px 12px rgba(13,27,62,0.06)",
+    transition: "box-shadow 0.25s ease",
+    cursor: "default",
+  },
+  upMedia: { position: "absolute", inset: 0 },
+  upTopScrim: {
+    position: "absolute", top: 0, left: 0, right: 0, height: 90,
+    background: "linear-gradient(to bottom, rgba(13,27,62,0.35), rgba(13,27,62,0))",
+    pointerEvents: "none",
+  },
+  audienceBadge: {
+    position: "absolute", top: 12, right: 12, zIndex: 2,
+    background: "rgba(13,27,62,0.9)", color: C.white,
+    borderRadius: 6, padding: "5px 10px",
+    fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
+  },
+  upMobileBtn: {
+    position: "absolute", bottom: 12, right: 12, zIndex: 3,
+    background: "rgba(13,27,62,0.78)", color: C.white,
+    border: "1px solid rgba(255,255,255,0.25)",
+    borderRadius: 8, padding: "7px 14px",
+    fontSize: 12, fontWeight: 700, cursor: "pointer",
+    fontFamily: "inherit",
+    backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)",
+  },
+  upCloseBtn: {
+    position: "absolute", top: 10, right: 10, zIndex: 4,
+    width: 28, height: 28, borderRadius: 8,
+    background: "rgba(255,255,255,0.16)", color: C.white,
+    border: "1px solid rgba(255,255,255,0.3)",
+    fontSize: 13, lineHeight: 1, cursor: "pointer", fontFamily: "inherit",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  },
+  upOverlay: {
+    position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 2,
+    padding: "18px 18px 20px",
+    background: "linear-gradient(to top, rgba(13,27,62,0.97) 60%, rgba(13,27,62,0.82))",
+    display: "flex", flexDirection: "column",
+  },
+  upTitle: { fontSize: 16, fontWeight: 800, color: C.white, margin: "0 0 8px", lineHeight: 1.3 },
+  upDesc:  { fontSize: 12.5, lineHeight: 1.6, color: "rgba(255,255,255,0.82)", margin: "0 0 12px" },
+  upMeta:  { display: "flex", flexWrap: "wrap", gap: "4px 14px", marginBottom: 4 },
+  upMetaItem: { fontSize: 11.5, color: "rgba(255,255,255,0.7)", fontWeight: 500 },
+
   bannerImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
   bannerPlaceholder: {
     width: "100%", height: "100%",
@@ -431,7 +695,7 @@ const S = {
     letterSpacing: -1,
   },
   dateBadge: {
-    position: "absolute", top: 12, left: 12,
+    position: "absolute", top: 12, left: 12, zIndex: 2,
     background: C.white, borderRadius: 10,
     padding: "6px 10px", display: "flex", flexDirection: "column",
     alignItems: "center", boxShadow: "0 2px 8px rgba(13,27,62,0.15)",
@@ -453,7 +717,7 @@ const S = {
     display: "inline-block", alignSelf: "flex-start",
     background: C.orange, color: C.white, textDecoration: "none",
     borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 700,
-    marginTop: "auto",
+    marginTop: 10,
   },
 
   pastList: { display: "flex", flexDirection: "column", gap: 0 },
@@ -477,6 +741,7 @@ const S = {
   pastTitle:  { fontSize: 16, fontWeight: 700, color: C.navyDeep, margin: 0 },
   pastBadges: { display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0 },
   pastDesc:   { fontSize: 13, lineHeight: 1.7, color: C.textMuted, margin: "0 0 10px" },
+  pastActions: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginTop: 4 },
   tagSmall: { borderRadius: 6, padding: "3px 9px", fontSize: 11, fontWeight: 700 },
   venuePill: {
     background: C.offWhite, border: `1px solid ${C.border}`,
@@ -487,6 +752,70 @@ const S = {
     background: "none", border: `1px solid ${C.border}`,
     borderRadius: 7, padding: "6px 14px",
     fontSize: 12, fontWeight: 700, color: C.navyMid, textDecoration: "none", cursor: "pointer",
+  },
+  viewDetailsBtn: {
+    display: "inline-block",
+    background: C.navyDeep, color: C.white, border: "none",
+    borderRadius: 8, padding: "8px 16px",
+    fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+  },
+
+  /* ── Details modal ───────────────────────────────────────── */
+  modalBackdrop: {
+    position: "fixed", inset: 0, zIndex: 1000,
+    background: "rgba(13,27,62,0.55)",
+    display: "flex", alignItems: "flex-start", justifyContent: "center",
+    padding: "48px 16px", overflowY: "auto",
+  },
+  modalBox: {
+    background: C.white, borderRadius: 16, width: "100%", maxWidth: 760,
+    boxShadow: "0 20px 60px rgba(13,27,62,0.35)",
+    display: "flex", flexDirection: "column",
+    animation: "rise 0.25s ease",
+  },
+  modalHeader: {
+    display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+    gap: 16, padding: "22px 24px 16px",
+  },
+  modalEyebrow: {
+    fontSize: 11, fontWeight: 700, letterSpacing: 1.2,
+    textTransform: "uppercase", color: C.orange, margin: "0 0 6px",
+  },
+  modalTitle: { fontSize: 20, fontWeight: 800, color: C.navyDeep, margin: 0, letterSpacing: -0.4, lineHeight: 1.3 },
+  modalClose: {
+    flexShrink: 0, width: 34, height: 34, borderRadius: 9,
+    border: `1px solid ${C.border}`, background: C.white, color: C.textMuted,
+    fontSize: 14, cursor: "pointer", fontFamily: "inherit", lineHeight: 1,
+  },
+  mediaToggle: { display: "flex", gap: 6, padding: "0 24px 14px" },
+  mediaToggleBtn: {
+    background: C.offWhite, border: `1px solid ${C.border}`, borderRadius: 8,
+    padding: "8px 16px", fontSize: 13, fontWeight: 700, color: C.textMuted,
+    cursor: "pointer", fontFamily: "inherit",
+  },
+  mediaToggleActive: { background: C.navyDeep, color: C.white, borderColor: C.navyDeep },
+  mediaArea: { padding: "0 24px" },
+  embedWrap: {
+    position: "relative", width: "100%", paddingTop: "56.25%",
+    background: "#000", borderRadius: 12, overflow: "hidden",
+  },
+  embedFrame: { position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" },
+  canvaLinkBtn: {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: C.orange, color: C.white, textDecoration: "none",
+    borderRadius: 12, padding: "20px", fontSize: 14, fontWeight: 700,
+  },
+  docsSection: { padding: "18px 24px 24px" },
+  docsHeading: {
+    fontSize: 12, fontWeight: 700, letterSpacing: 1,
+    textTransform: "uppercase", color: C.textDim, margin: "0 0 10px",
+  },
+  docsList: { display: "flex", flexDirection: "column", gap: 8 },
+  docLink: {
+    display: "inline-flex", alignItems: "center", gap: 4,
+    background: C.offWhite, border: `1px solid ${C.border}`, borderRadius: 8,
+    padding: "10px 14px", fontSize: 13, fontWeight: 600, color: C.navyMid,
+    textDecoration: "none",
   },
 
   empty: { textAlign: "center", padding: "60px 0" },

@@ -1,4 +1,4 @@
-export const API_BASE = "https://ug-0ceb454fbac544039d40462fe569d71b.ecs.ap-south-1.on.aws";
+export const API_BASE = "/api-proxy";
 export const FORMSPREE_ID = "YOUR_FORMSPREE_ID";
 const REQUEST_TIMEOUT_MS = 12000;
 

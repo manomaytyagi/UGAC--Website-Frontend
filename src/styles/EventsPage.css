@@ -12,8 +12,38 @@
   border-radius: 6px;
 }
 
+/* =====================================================================
+   Upcoming cards — info stays hidden and rises up on hover/focus
+   ===================================================================== */
+.uc-events .uc-up-card .uc-up-overlay {
+  transform: translateY(101%);
+  transition: transform .4s cubic-bezier(.22, .61, .36, 1);
+  will-change: transform;
+}
+
+.uc-events .uc-up-card:hover,
+.uc-events .uc-up-card:focus-within {
+  box-shadow: 0 12px 30px rgba(13, 27, 62, 0.20);
+}
+
+/* Desktop (hover-capable): reveal on hover or keyboard focus */
+@media (hover: hover) {
+  .uc-events .uc-up-card:hover .uc-up-overlay,
+  .uc-events .uc-up-card:focus-within .uc-up-overlay {
+    transform: translateY(0);
+  }
+}
+
+/* Mobile / touch: revealed only when the View Details button is tapped */
+.uc-events .uc-up-card.uc-up-open .uc-up-overlay {
+  transform: translateY(0);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .uc-events * {
     animation: none !important;
+  }
+  .uc-events .uc-up-card .uc-up-overlay {
+    transition: none;
   }
 }
