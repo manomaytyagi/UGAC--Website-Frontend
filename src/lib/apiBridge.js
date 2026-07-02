@@ -1,5 +1,5 @@
 export const API_BASE = "/api-proxy";
-export const FORMSPREE_ID = "YOUR_FORMSPREE_ID";
+export const FORMSPREE_ID = import.meta.env.VITE_FORMSPREE_ID || "";
 const REQUEST_TIMEOUT_MS = 12000;
 
 async function request(path, { method = "GET", body, signal } = {}) {
@@ -287,17 +287,15 @@ export const api = {
   },
 
   async submitReview(payload) {
-    return withFallback(async () => {
-      return request("/reviews/", {
-        method: "POST",
-        body: {
-          course_id: payload.course_id,
-          student_name: payload.author === "Anonymous" ? null : payload.author,
-          rating: payload.rating,
-          review_text: payload.text,
-        },
-      });
-    }, null);
+    return request("/reviews/", {
+      method: "POST",
+      body: {
+        course_id: payload.course_id,
+        student_name: payload.author === "Anonymous" ? null : payload.author,
+        rating: payload.rating,
+        review_text: payload.text,
+      },
+    });
   },
 
   async curriculum(deptId, fallbackData) {

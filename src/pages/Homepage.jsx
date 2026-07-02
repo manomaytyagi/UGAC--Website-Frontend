@@ -1,11 +1,11 @@
 import { useNavigate } from "react-router-dom";
-import Hero from "../components/Hero.jsx";
-import Team from "../components/Team.jsx";
-import Events from "../components/Events.jsx";
-import CoursesPreview from "../components/CoursesPreview.jsx";
-import Resources from "../components/Resources.jsx";
-import Contact from "../components/Contact.jsx";
-import Footer from "../components/Footer.jsx";
+import Hero from "../components/HomePage/Hero.jsx";
+import Team from "../components/HomePage/Team.jsx";
+import Events from "../components/HomePage/Events.jsx";
+import CoursesPreview from "../components/HomePage/CoursesPreview.jsx";
+import Resources from "../components/HomePage/Resources.jsx";
+import Contact from "../components/HomePage/Contact.jsx";
+import Footer from "../components/HomePage/Footer.jsx";
 
 export default function Homepage() {
   const navigate = useNavigate();

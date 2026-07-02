@@ -83,18 +83,32 @@ function ReviewForm({ courseId, accent, onSubmit }) {
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
   const handleSubmit = async () => {
     if (!text.trim() || text.length < 20) return;
     setSubmitting(true);
+    setSubmitError(null);
     const payload = { course_id: courseId, rating, text, author: anon ? "Anonymous" : (name || "Anonymous"), semester: "This semester" };
-    await api.submitReview(payload);
-    setSubmitting(false);
-    setDone(true);
-    if (onSubmit) onSubmit(payload);
+    try {
+      await api.submitReview(payload);
+      setDone(true);
+      if (onSubmit) onSubmit(payload);
+    } catch (err) {
+      setSubmitError("Review save nahi ho saki — please thodi der baad dobara try karein.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  if (done) return <div style={S.reviewSuccess}>Review submitted — thank you for helping your peers.</div>;
+  if (done) return (
+    <div style={S.reviewSuccess}>
+      Review submit ho gayi — shukriya! 🎉
+      <span style={{ display: "block", marginTop: 6, fontWeight: 500, fontSize: 13 }}>
+        Aapki review moderation ke baad dikhegi (usually 24–48 ghante).
+      </span>
+    </div>
+  );
 
   const tooShort = text.trim().length < 20;
 
@@ -125,19 +139,32 @@ function ReviewForm({ courseId, accent, onSubmit }) {
 
       <textarea
         style={{ ...S.input, ...S.textarea }}
-        placeholder="What stood out — workload, teaching, assessments? (min 20 characters)"
+        placeholder="What stood out — workload, teaching, assessments?"
         value={text}
         onChange={e => setText(e.target.value)}
         rows={4}
       />
-      <button
-        type="button"
-        style={{ ...S.submitBtn, background: accent, opacity: tooShort ? 0.45 : 1, cursor: tooShort ? "not-allowed" : "pointer" }}
-        disabled={tooShort || submitting}
-        onClick={handleSubmit}
+      <div style={S.charCountRow}>
+        <span style={{ ...S.charCount, color: tooShort ? "#c0392b" : "#22863a" }}>
+          {text.length} / 20{tooShort ? ` — ${20 - text.length} more needed` : " ✓"}
+        </span>
+      </div>
+      <div
+        title={tooShort ? `Write ${20 - text.length} more character${20 - text.length !== 1 ? "s" : ""} to submit` : ""}
+        style={{ display: "inline-block" }}
       >
-        {submitting ? "Submitting…" : "Submit review"}
-      </button>
+        <button
+          type="button"
+          style={{ ...S.submitBtn, background: accent, opacity: tooShort ? 0.45 : 1, cursor: tooShort ? "not-allowed" : "pointer" }}
+          disabled={tooShort || submitting}
+          onClick={handleSubmit}
+        >
+          {submitting ? "Submitting…" : "Submit review"}
+        </button>
+      </div>
+      {submitError && (
+        <p style={S.reviewError}>{submitError}</p>
+      )}
     </div>
   );
 }
@@ -378,10 +405,16 @@ const S = {
     padding: "11px 14px", fontSize: 14, color: C.navyDeep, background: C.offWhite,
     marginBottom: 12, outline: "none", fontFamily: "inherit",
   },
-  textarea: { resize: "vertical", minHeight: 104, lineHeight: 1.6 },
+  textarea: { resize: "vertical", minHeight: 104, lineHeight: 1.6, marginBottom: 4 },
+  charCountRow: { display: "flex", justifyContent: "flex-end", marginBottom: 12 },
+  charCount: { fontSize: 11, fontWeight: 600, letterSpacing: 0.3, transition: "color 0.2s" },
   submitBtn: { color: C.white, border: "none", borderRadius: 9, padding: "12px 26px", fontSize: 14, fontWeight: 700, fontFamily: "inherit" },
   reviewSuccess: {
     background: tint("#22c55e", 0.14), color: "#166534", border: `1px solid ${tint("#22c55e", 0.35)}`,
     borderRadius: 12, padding: "18px 22px", fontSize: 14, fontWeight: 700,
+  },
+  reviewError: {
+    background: tint("#ef4444", 0.1), color: "#991b1b", border: `1px solid ${tint("#ef4444", 0.3)}`,
+    borderRadius: 8, padding: "10px 14px", fontSize: 13, fontWeight: 600, marginTop: 10,
   },
 };
