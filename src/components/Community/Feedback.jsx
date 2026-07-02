@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Icon } from "./contacts";
+import { Icon } from "./Contacts";
 
 // Feedback categories — tweak to match your form backend / routing.
 const CATEGORIES = [

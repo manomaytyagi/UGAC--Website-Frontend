@@ -1,5 +1,4 @@
-// Shared building blocks for the Community section.
-// Ported from TeamPage so contacts, colours, and typography stay identical.
+
 
 export const C = {
   navyDeep: "#0d1b3e",
