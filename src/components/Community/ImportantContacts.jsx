@@ -1,4 +1,4 @@
-import { Contacts, C } from "./Contacts";
+import { Contacts, C } from "./contacts";
 
 /* Important contacts, grouped by function and colour.
    NOTE: names/emails below are placeholders following the @iitmandi.ac.in

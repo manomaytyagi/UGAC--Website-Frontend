@@ -103,9 +103,8 @@ function ReviewForm({ courseId, accent, onSubmit }) {
 
   if (done) return (
     <div style={S.reviewSuccess}>
-      Review submit ho gayi — shukriya! 🎉
-      <span style={{ display: "block", marginTop: 6, fontWeight: 500, fontSize: 13 }}>
-        Aapki review moderation ke baad dikhegi (usually 24–48 ghante).
+      Review submitted successfully! Thank you for sharing your feedback.
+      <span style={{ display: "block", marginTop: 6, fontWeight: 500, fontSize: 13 }}>.
       </span>
     </div>
   );

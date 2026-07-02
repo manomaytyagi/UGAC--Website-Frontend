@@ -1,4 +1,4 @@
-export const API_BASE = "/api-proxy";
+export const API_BASE = import.meta.env.VITE_API_BASE || "/api-proxy";
 export const FORMSPREE_ID = import.meta.env.VITE_FORMSPREE_ID || "";
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -351,15 +351,13 @@ export const api = {
       const credits = match ? {
         total: match.total_credits || 0,
         rows: [
-          { label: "Institute Core",       credits: match.ic_compulsory_credits || 0 },
-          { label: "IC Basket",            credits: match.icb_credits || 0 },
+          { label: "Institute Core",       credits: match.ic_credits || 0 },
           { label: "HSS / IKS",            credits: match.hss_iks_credits || 0 },
           { label: "Discipline Core",      credits: match.dc_credits || 0 },
           { label: "Discipline Elective",  credits: match.de_credits || 0 },
           { label: "Free Elective",        credits: match.fe_credits || 0 },
           { label: "MTP",                  credits: match.mtp_credits || 0 },
           { label: "ISTP",                 credits: match.istp_credits || 0 },
-          { label: "Research",             credits: match.research_credits || 0 },
         ].filter((r) => r.credits > 0),
       } : null;
 
