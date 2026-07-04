@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Contacts, BRANCH_COLORS, NEW_BRANCH_COLORS } from "./contacts";
+import { Contacts, BRANCH_COLORS, NEW_BRANCH_COLORS } from "./Contacts";
 
 /* Faculty advisers, grouped by branch and year.
    12 established branches x 4 years (48) + 3 newer branches with a
