@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import Navigation from "./components/Navigation.jsx";
 import Homepage from "./pages/Homepage.jsx";
 import TeamPage from "./pages/TeamPage.jsx";
@@ -10,6 +10,7 @@ import CurriculumPage from "./pages/CurriculumPage.jsx";
 import ResourcesPage from "./pages/ResourcesPage.jsx";
 import FeedbackForm from "./pages/FeedbackForm.jsx";
 import CommunityPage from "./pages/CommunityPage.jsx";
+import NotFound from "./pages/NotFound.jsx";
 
 export default function App() {
   const navigate = useNavigate();
@@ -56,10 +57,6 @@ export default function App() {
           events: () => navigate("/events"),
           curriculum: () => navigate("/curriculum"),
           resources: () => navigate("/resources"),
-          communityBlogs: () => navigate("/community/blogs"),
-          communityAcademics: () => navigate("/community/academics"),
-          communityCrs: () => navigate("/community/crs"),
-          feedback: () => navigate("/community/feedback"),
           team: () => navigate("/team"),
         }}
       />
@@ -74,33 +71,18 @@ export default function App() {
           path="/events"
           element={<EventsPage onBack={() => navigate("/")} />}
         />
+        <Route path="/community" element={<Navigate to="/community/feedback" replace />} />
+        <Route path="/community/feedback" element={<CommunityPage type="feedback" />} />
         <Route
-          path="/community/blogs"
-          element={<CommunityPage type="blogs" />}
+          path="/community/important-contacts"
+          element={<CommunityPage type="important-contacts" />}
         />
         <Route
-          path="/community/academics"
-          element={<CommunityPage type="academics" />}
+          path="/community/faculty-advisers"
+          element={<CommunityPage type="faculty-advisers" />}
         />
-        <Route
-          path="/community/academics/procedure"
-          element={<CommunityPage type="procedure" />}
-        />
-        <Route
-          path="/community/academics/procedure/:slug"
-          element={<CommunityPage type="procedure" />}
-        />
-        <Route
-          path="/community/academics/opportunities"
-          element={<CommunityPage type="opportunities" />}
-        />
-        <Route
-          path="/community/academics/awards"
-          element={<CommunityPage type="awards" />}
-        />
-        <Route path="/community/feedback" element={<FeedbackForm />} />
         <Route path="/feedback" element={<FeedbackForm />} />
-        <Route path="/community/crs" element={<CommunityPage type="crs" />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </>
   );

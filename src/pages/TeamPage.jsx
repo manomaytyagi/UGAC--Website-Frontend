@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { apiFetch } from "../lib/apiBridge";
+import { COLORS as C } from "../styles/colors.js";
 import "../styles/TeamPage.css";
 
 // Hook: returns true when viewport width ≤ 560px
@@ -13,20 +14,6 @@ function useIsMobile() {
   }, []);
   return mobile;
 }
-
-// Page Colors
-const C = {
-  navyDeep:  "#0d1b3e",
-  navyMid:   "#1e3a6e",
-  navyLight: "#2e509e",
-  orange:    "#ee9116",
-  white:     "#ffffff",
-  offWhite:  "#edebe7",
-  border:    "#dce3f0",
-  textMuted: "#5a6a8a",
-  textDim:   "#8a9abc",
-  ink:       "#101935",
-};
 
 // Color mapping for each branch
 const HUES = {

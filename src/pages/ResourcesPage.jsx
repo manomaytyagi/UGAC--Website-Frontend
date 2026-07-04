@@ -1,20 +1,8 @@
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { resourcesApi } from "../lib/apiBridge";
+import { COLORS as C } from "../styles/colors.js";
 import "../styles/ResourcesPage.css";
-
-const C = {
-  navyDeep:  "#0d1b3e",
-  navyMid:   "#1e3a6e",
-  navyLight: "#2e509e",
-  orange:    "#ee9116",
-  white:     "#ffffff",
-  offWhite:  "#edebe7",
-  border:    "#dce3f0",
-  textMuted: "#5a6a8a",
-  textDim:   "#8a9abc",
-  ink:       "#101935",
-};
 
 const TABS = [
   { id: "documents",  label: "📄 Academic Documents" },
@@ -95,44 +83,7 @@ const FALLBACKS = {
       url: "https://swayam.gov.in",
     },
   ],
-  forms: [
-    {
-      title: "Course Drop / Add Request",
-      desc: "Form to add or drop a course within the permitted window each semester.",
-      tag: "Form",
-      file_key: "forms/course-drop-add.pdf",
-    },
-    {
-      title: "Grade Review Application",
-      desc: "Procedure and form for requesting re-evaluation of an exam or assignment.",
-      tag: "Form",
-      file_key: "forms/grade-review.pdf",
-    },
-    {
-      title: "Medical Leave Application",
-      desc: "Apply for medical leave and request extensions to assignment deadlines.",
-      tag: "Form",
-      file_key: "forms/medical-leave.pdf",
-    },
-    {
-      title: "NOC for Internship",
-      desc: "No-objection certificate required before joining a summer/semester internship.",
-      tag: "Form",
-      file_key: "forms/noc-internship.pdf",
-    },
-    {
-      title: "Minor Programme Registration",
-      desc: "Registration form for enrolling in a minor discipline.",
-      tag: "Form",
-      file_key: "forms/minor-registration.pdf",
-    },
-    {
-      title: "Academic Grievance Procedure",
-      desc: "Step-by-step guide on how to escalate unresolved academic concerns.",
-      tag: "Guide",
-      file_key: "forms/grievance-procedure.pdf",
-    },
-  ],
+  forms: [],
   papers: [
     {
       title: "CS — End Semester Papers (2022–25)",

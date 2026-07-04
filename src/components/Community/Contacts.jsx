@@ -1,17 +1,7 @@
-
-
-export const C = {
-  navyDeep: "#0d1b3e",
-  navyMid: "#1e3a6e",
-  navyLight: "#2e509e",
-  orange: "#ee9116",
-  white: "#ffffff",
-  offWhite: "#edebe7",
-  border: "#dce3f0",
-  textMuted: "#5a6a8a",
-  textDim: "#8a9abc",
-  ink: "#101935",
-};
+// Shared building blocks for the Community section.
+// Ported from TeamPage so contacts, colours, and typography stay identical.
+import { COLORS as C } from "../../styles/colors.js";
+export { C };
 
 // Same hue system the Team page uses, so branch colours line up across pages.
 const HUES = {

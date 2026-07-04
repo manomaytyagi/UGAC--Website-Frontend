@@ -1,21 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FORMSPREE_ID } from "../lib/apiBridge.js";
-
-const C = {
-  navyDeep: "#0d1b3e",
-  navyMid: "#1e3a6e",
-  navyLight: "#2e509e",
-  orange: "#f97316",
-  orangeSoft: "#fed7aa",
-  white: "#ffffff",
-  offWhite: "#f5f7fc",
-  border: "#dce3f0",
-  textMuted: "#5a6a8a",
-  textDim: "#8a9abc",
-  error: "#dc2626",
-  success: "#16a34a",
-};
+import { FEEDBACK_COLORS as C } from "../styles/colors.js";
 
 const CATEGORIES = ["Academic", "Administrative", "Other"];
 

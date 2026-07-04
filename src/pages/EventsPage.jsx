@@ -1,19 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../lib/apiBridge";
+import { COLORS as C } from "../styles/colors.js";
 import "../styles/EventsPage.css";
-
-const C = {
-  navyDeep:  "#0d1b3e",
-  navyMid:   "#1e3a6e",
-  navyLight: "#2e509e",
-  orange:    "#ee9116",
-  white:     "#ffffff",
-  offWhite:  "#edebe7",
-  border:    "#dce3f0",
-  textMuted: "#5a6a8a",
-  textDim:   "#8a9abc",
-  ink:       "#101935",
-};
 
 const TAG_COLORS = {
   "Open Forum": { bg: "#eff6ff", color: "#1d4ed8" },
@@ -26,67 +14,8 @@ const TAG_COLORS = {
 const tagStyle = (tag) => TAG_COLORS[tag] || TAG_COLORS["Other"];
 
 const FALLBACK = {
-  upcoming: [
-    {
-      id: "u1", title: "Academic Grievance Open House",
-      desc: "An open forum for students to raise academic concerns directly with council members and faculty representatives. All concerns are documented and escalated appropriately.",
-      date: "2026-06-28", time: "3:00 PM", venue: "Lecture Hall A",
-      tag: "Open Forum", audience: "All Years", banner_key: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQIAC1kBFD8UgsOayMBHWl9pktJkSO1BuY7ZpdVGmLUMg&s=10", form_url: null, report_key: null,
-    },
-    {
-      id: "u2", title: "UGAC Website Launch — v1",
-      desc: "Official launch of the UGAC website. Live demo walkthrough, feedback collection from students, and recognition of contributors who built the platform.",
-      date: "2026-07-05", time: "5:00 PM", venue: "Main Auditorium",
-      tag: "Launch", audience: "All Years", banner_key: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRHj0r68jZH4eo3fYSF4w2kuacrnLWu69OP644HsnhNkw&s=10", form_url: null, report_key: null,
-    },
-    {
-      id: "u3", title: "Curriculum Feedback Drive",
-      desc: "Structured feedback collection from UG students on the current curriculum, grading policies, and course load. Results will be presented to the Academic Office.",
-      date: "2026-07-20", time: null, venue: "Online",
-      tag: "Survey", audience: "2nd Year", banner_key: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSHa8idw8HqiJ7I78N3FgMdWef6VHKKiZD3KCmwuw6X7w&s=10", form_url: null, report_key: null,
-    },
-    {
-      id: "u4", title: "Academic Policy Workshop",
-      desc: "Interactive workshop where students learn about academic regulations, promotion criteria, grade appeals, and their rights under the UG Academic Regulations 2024.",
-      date: "2026-08-10", time: "2:00 PM", venue: "Seminar Room B",
-      tag: "Workshop", audience: "1st Year", banner_key: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS4ifAPkvjBxGuPA74qvyJBU7TOayHB_eXDuSnNU4YqRw&s=10", form_url: null, report_key: null,
-    },
-  ],
-  past: [
-    {
-      id: "p1", title: "Semester Kickoff — Spring 2026",
-      desc: "Introduction to UGAC, council structure, and academic resources available to students. Attended by over 200 undergraduate students.",
-      date: "2026-01-08", time: "4:00 PM", venue: "Main Auditorium",
-      tag: "Talk", banner_key: null, form_url: null, report_key: null,
-      // --- details shown in the "View Details" popup (replace with your links) ---
-      youtube_url: "https://www.youtube.com/watch?v=LXb3EKWsInQ",
-      canva_url:   "https://www.canva.com/design/DAHN9e-KAEE/KnaIfSW0xG9ivR9_e6rDCQ/view",
-      documents: [
-        { label: "Session Slides (PDF)", url: "https://example.com/kickoff-slides.pdf" },
-        { label: "Attendance Summary",   url: "https://example.com/kickoff-attendance.pdf" },
-      ],
-    },
-    {
-      id: "p2", title: "Grievance Redressal Session — Jan 2026",
-      desc: "Monthly open session for students to raise unresolved academic grievances. 12 concerns were formally logged and escalated.",
-      date: "2026-01-25", time: "3:30 PM", venue: "Online",
-      tag: "Open Forum", banner_key: null, form_url: null, report_key: null,
-      youtube_url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
-      canva_url:   null,
-      documents: [],
-    },
-    {
-      id: "p3", title: "Exam Prep Resources Drive",
-      desc: "Distribution of curated past papers, notes, and study resources across all branches ahead of end-semester examinations.",
-      date: "2026-04-12", time: null, venue: "Online",
-      tag: "Other", banner_key: null, form_url: null, report_key: null,
-      youtube_url: null,
-      canva_url:   "https://www.canva.com/design/DAGexample02/view",
-      documents: [
-        { label: "Resource Pack (Drive)", url: "https://example.com/resource-pack" },
-      ],
-    },
-  ],
+  upcoming: [],
+  past: [],
 };
 
 function formatDate(iso) {

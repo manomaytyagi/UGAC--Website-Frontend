@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/apiBridge.js";
+import { COLORS as C } from "../styles/colors.js";
 import "../styles/CurriculumPage.css";
 
 function useIsMobile() {
@@ -13,19 +14,6 @@ function useIsMobile() {
   }, []);
   return mobile;
 }
-
-const C = {
-  navyDeep:  "#0d1b3e",
-  navyMid:   "#1e3a6e",
-  navyLight: "#2e509e",
-  orange:    "#ee9116",
-  white:     "#ffffff",
-  offWhite:  "#edebe7",
-  border:    "#dce3f0",
-  textMuted: "#5a6a8a",
-  textDim:   "#8a9abc",
-  ink:       "#101935",
-};
 
 /* Branch metadata: 12 real IIT Mandi branches, colours match apiBridge */
 const BRANCH_META = {

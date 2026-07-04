@@ -9,7 +9,7 @@ export const navLinks = [
 ];
 
 export const campusImages = {
-  hero: "https://cce.iitmandi.ac.in/images/heroimg.jpg",
+  hero: "",
 };
 
 
