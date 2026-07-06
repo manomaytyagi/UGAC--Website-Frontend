@@ -1,4 +1,4 @@
-import Flowchart from "./Flowcharts";
+import Flowchart from "./FlowCharts";
 
 /* ──────────────────────────────────────────────────────────────────────────
    INTERNSHIP PROCEDURE
@@ -13,7 +13,7 @@ const FLOW = {
     title: "Got an intern, yayy! ",
     options: [
       { label: "Yes, I got one!", branch: "Got offer", next: "getOffer" },
-      { label: "Not yet ",      branch: "No intern", next: "noIntern" },
+      { label: "Not yet ", branch: "No intern", next: "noIntern" },
     ],
   },
 
@@ -46,7 +46,11 @@ const FLOW = {
     body: "Just keep your FA in the loop — no further academic approval needed.",
     next: "doneVacation",
   },
-  doneVacation: { kind: "done", title: "Done", body: "All set for your vacation internship." },
+  doneVacation: {
+    kind: "done",
+    title: "Done",
+    body: "All set for your vacation internship.",
+  },
 
   faApproval: {
     kind: "action",
@@ -86,7 +90,11 @@ const FLOW = {
       { label: "Onsite ", branch: "Onsite", next: "hostelLeave" },
     ],
   },
-  doneRemote: { kind: "done", title: "Done", body: "Remote — no hostel formalities. All set." },
+  doneRemote: {
+    kind: "done",
+    title: "Done",
+    body: "Remote — no hostel formalities. All set.",
+  },
 
   hostelLeave: {
     kind: "action",
@@ -100,11 +108,15 @@ const FLOW = {
     short: "Fee on Samarth?",
     title: "Hostel / mess fee shown on Samarth?",
     options: [
-      { label: "No",  branch: "No",  next: "doneNoFee" },
+      { label: "No", branch: "No", next: "doneNoFee" },
       { label: "Yes", branch: "Yes", next: "emailDSO" },
     ],
   },
-  doneNoFee: { kind: "done", title: "Done", body: "No fee shown — nothing more to do." },
+  doneNoFee: {
+    kind: "done",
+    title: "Done",
+    body: "No fee shown — nothing more to do.",
+  },
 
   emailDSO: {
     kind: "email",
@@ -113,7 +125,11 @@ const FLOW = {
     attachments: ["Hostel Leave Form", "Offer Letter", "NOC"],
     next: "doneFinal",
   },
-  doneFinal: { kind: "done", title: "Done", body: "All approvals complete. Enjoy your internship! 🚀" },
+  doneFinal: {
+    kind: "done",
+    title: "Done",
+    body: "All approvals complete. Enjoy your internship! 🚀",
+  },
 };
 
 const INTRO = {

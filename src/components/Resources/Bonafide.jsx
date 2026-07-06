@@ -1,4 +1,4 @@
-import Flowchart from "./Flowcharts";
+import Flowchart from "./FlowCharts";
 
 /* ──────────────────────────────────────────────────────────────────────────
    BONAFIDE CERTIFICATE PROCEDURE
@@ -18,8 +18,12 @@ const FLOW = {
     kind: "start",
     title: "What is the bonafide certificate for?",
     options: [
-      { label: "Academic purpose",     branch: "Academic",     next: "academicApply" },
-      { label: "Non-academic purpose", branch: "Non-academic", next: "nonAcademicApply" },
+      { label: "Academic purpose", branch: "Academic", next: "academicApply" },
+      {
+        label: "Non-academic purpose",
+        branch: "Non-academic",
+        next: "nonAcademicApply",
+      },
     ],
   },
 
@@ -45,7 +49,7 @@ const FLOW = {
     title: "Offline or online submission?",
     options: [
       { label: "Offline", branch: "Offline", next: "offFill" },
-      { label: "Online",  branch: "Online",  next: "onFill" },
+      { label: "Online", branch: "Online", next: "onFill" },
     ],
   },
 

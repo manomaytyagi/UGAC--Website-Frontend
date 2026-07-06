@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { getProcedure } from "./registry";
+import { getProcedure } from "./Registry";
 import { COLORS as C } from "../../styles/colors.js";
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -21,7 +21,9 @@ export default function ProcedurePage() {
     return (
       <div style={S.page}>
         <div style={S.header}>
-          <button style={S.backBtn} onClick={goBack}>← Back</button>
+          <button style={S.backBtn} onClick={goBack}>
+            ← Back
+          </button>
           <div>
             <p style={S.eyebrow}>UGAC · IIT Mandi</p>
             <h1 style={S.h1}>Procedure not found</h1>
@@ -45,10 +47,14 @@ export default function ProcedurePage() {
   return (
     <div style={S.page}>
       <div style={S.header}>
-        <button style={S.backBtn} onClick={goBack}>← Back</button>
+        <button style={S.backBtn} onClick={goBack}>
+          ← Back
+        </button>
         <div>
           <p style={S.eyebrow}>UGAC · IIT Mandi · Procedures</p>
-          <h1 style={S.h1}>{proc.icon} {proc.title}</h1>
+          <h1 style={S.h1}>
+            {proc.icon} {proc.title}
+          </h1>
           {proc.desc && <p style={S.subtitle}>{proc.desc}</p>}
         </div>
       </div>
