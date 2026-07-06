@@ -9,7 +9,7 @@ export const navLinks = [
 ];
 
 export const campusImages = {
-  hero: "",
+  hero: null,
 };
 
 
@@ -44,12 +44,12 @@ export const clubs = [
 ];
 
 export const team = [
-  { name: "Aditya Tayal", role: "Interim Secretary", area: "Council coordination" },
+  { name: "Aditya Tayal", role: "next gen Secretary current acad secy", area: "Council coordination" },
   { name: "Vishnu", role: "Previous Secretary", area: "Continuity" },
   { name: "Aarushi", role: "Member", area: "Backend" },
   { name: "Aryan", role: "Member", area: "Backend" },
   { name: "Kanika", role: "Member", area: "Frontend" },
-  { name: "Manomay", role: "Member", area: "Frontend" }
+  { name: "Manomay", role: "upcoming secy", area: "Frontend" }
 ];
 
 export const events = [

@@ -15,20 +15,24 @@ function useIsMobile() {
   return mobile;
 }
 
-/* Branch metadata: 12 real IIT Mandi branches, colours match apiBridge */
+/* Branch metadata: 16 real IIT Mandi branches, colours match apiBridge */
 const BRANCH_META = {
-  BIO:  { name: "Bio Engineering",                          color: "#6fa3d0" },
-  CSE:  { name: "Computer Science and Engineering",         color: "#4f7cc4" },
-  EE:   { name: "Electrical Engineering",                   color: "#37548f" },
-  CE:   { name: "Civil Engineering",                        color: "#d98c80" },
-  ME:   { name: "Mechanical Engineering",                   color: "#c25b52" },
-  MNC:  { name: "Mathematics and Computing",                color: "#9c4a52" },
-  VLSI: { name: "Microelectronics and VLSI",                color: "#84b88c" },
-  EP:   { name: "Engineering Physics",                      color: "#4e9b72" },
-  DSAI: { name: "Data Science and Artificial Intelligence", color: "#2f6e54" },
-  MSE:  { name: "Materials Science and Engineering",        color: "#e0aa6b" },
-  GE:   { name: "General Engineering",                      color: "#d18a3e" },
-  BS:   { name: "BS in Chemical Sciences",                  color: "#a8682c" },
+  BIO:  { name: "Bio Engineering",                                color: "#6fa3d0" },
+  CSE:  { name: "Computer Science and Engineering",               color: "#4f7cc4" },
+  EE:   { name: "Electrical Engineering",                         color: "#37548f" },
+  CE:   { name: "Civil Engineering",                              color: "#d98c80" },
+  ME:   { name: "Mechanical Engineering",                         color: "#c25b52" },
+  MNC:  { name: "Mathematics and Computing",                      color: "#9c4a52" },
+  VLSI: { name: "Microelectronics and VLSI",                      color: "#84b88c" },
+  EP:   { name: "Engineering Physics",                            color: "#4e9b72" },
+  DSAI: { name: "Data Science and Artificial Intelligence",       color: "#2f6e54" },
+  MSE:  { name: "Materials Science and Engineering",              color: "#e0aa6b" },
+  GE:   { name: "General Engineering",                            color: "#d18a3e" },
+  BS:   { name: "BS in Chemical Sciences",                        color: "#a8682c" },
+  DSE:  { name: "Data Science and Engineering",                   color: "#2a3f6e" },  
+  QSE:   { name: "Quantum Science and Engineering",                color: "#b03a42" },  
+  AE:   { name: "Agricultural Engineering with Data Analytics",   color: "#1d4d38" },  
+  CEDA: { name: "Chemical Engineering with Data Analytics",       color: "#7a4a1e" },  
 };
 
 const FALLBACK_BRANCHES = Object.entries(BRANCH_META).map(([code, m]) => ({
@@ -292,20 +296,33 @@ function CouncilEmblem({ branches, onPick, reduce, big, onHover }) {
 }
 
 
+/* GE specialisation options */
+const GE_SPECIALISATIONS = [
+  { code: "GE-CS",   name: "Computer Science" },
+  { code: "GE-EE",   name: "Electrical Engineering" },
+  { code: "GE-ME",   name: "Mechanical Engineering" },
+  { code: "GE-CE",   name: "Civil Engineering" },
+  { code: "GE-BIO",  name: "Bio Engineering" },
+  { code: "GE-DSAI", name: "Data Science & AI" },
+];
+
 function BranchCurriculum({ branch, onBack, reduce }) {
   const navigate = useNavigate();
   const mobile = useIsMobile();
-  const [year, setYear]           = useState(1);
-  const [batch, setBatch]         = useState(null);
-  const [batches, setBatches]     = useState(FALLBACK_BATCHES);
-  const [semesters, setSemesters] = useState([]);
-  const [loading, setLoading]     = useState(true);
+  const [batch, setBatch]           = useState(null);
+  const [batches, setBatches]       = useState(FALLBACK_BATCHES);
+  const [semesters, setSemesters]   = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [geSpec, setGeSpec]         = useState(GE_SPECIALISATIONS[0].code);
+
+  const isGE = branch.id === "GE";
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setSemesters([]);
-    api.curriculum(branch.id, null).then((res) => {
+    const opts = isGE && geSpec ? { specialisation: geSpec } : {};
+    api.curriculum(branch.id, null, opts).then((res) => {
       if (cancelled) return;
       const data = res.data;
       if (data) {
@@ -320,14 +337,12 @@ function BranchCurriculum({ branch, onBack, reduce }) {
       setLoading(false);
     }).catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [branch.id]);
+  }, [branch.id, isGE, geSpec]);
 
-  const shown = semesters.filter((s) => s.num === year * 2 - 1 || s.num === year * 2);
-  const yearCredits = shown.reduce((t, s) => t + s.courses.reduce((a, c) => a + c.credits, 0), 0);
+  const totalCredits = semesters.reduce((t, s) => t + s.courses.reduce((a, c) => a + c.credits, 0), 0);
   const displayBatches = batches.length ? batches : FALLBACK_BATCHES;
   const displayBatch   = batch || displayBatches[0];
 
-  // Mobile year/batch tab: compact, no sem subtitle, all fit on one row
   const mobileTab = {
     ...S.tab,
     padding: "8px 4px",
@@ -360,27 +375,45 @@ function BranchCurriculum({ branch, onBack, reduce }) {
         ? { display: "flex", flexDirection: "column", gap: 16, marginBottom: 18 }
         : S.controlRow
       }>
-        <div style={mobile
-          ? { display: "flex", flexDirection: "column", gap: 6, width: "100%" }
-          : S.controlGroup
-        }>
-          <span style={S.groupLabel}>Year</span>
-          <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", width: "100%" }}>
-            {[1, 2, 3, 4].map((y) => (
-              <button
-                key={y}
-                onClick={() => setYear(y)}
+        {}
+        {isGE && (
+          <div style={S.controlGroup}>
+            <span style={S.groupLabel}>Specialisation</span>
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <select
+                value={geSpec}
+                onChange={(e) => setGeSpec(e.target.value)}
                 style={{
-                  ...(mobile ? mobileTab : S.tab),
-                  ...(year === y ? { ...S.tabActive, borderColor: branch.color, color: branch.color } : {}),
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  background: C.white,
+                  border: `1.5px solid ${branch.color}`,
+                  borderRadius: 12,
+                  padding: "10px 44px 10px 16px",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: branch.color,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  outline: "none",
+                  boxShadow: "0 4px 14px rgba(13,27,62,.08)",
+                  minWidth: 220,
                 }}
               >
-                <span style={S.tabBig}>Year {y}</span>
-                {!mobile && <span style={S.tabSmall}>Sem {y * 2 - 1}–{y * 2}</span>}
-              </button>
-            ))}
+                {GE_SPECIALISATIONS.map((sp) => (
+                  <option key={sp.code} value={sp.code}>{sp.name}</option>
+                ))}
+              </select>
+              <svg
+                width="14" height="14" viewBox="0 0 24 24" fill="none"
+                style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+                aria-hidden="true"
+              >
+                <path d="M6 9l6 6 6-6" stroke={branch.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
           </div>
-        </div>
+        )}
 
         <div style={mobile
           ? { display: "flex", flexDirection: "column", gap: 6, width: "100%" }
@@ -406,19 +439,23 @@ function BranchCurriculum({ branch, onBack, reduce }) {
       </div>
 
       <div style={S.yearMeta}>
-        <span>Year {year} · {displayBatch} batch</span>
-        <span style={{ color: branch.color, fontWeight: 700 }}>{yearCredits} credits</span>
+        <span>
+          {isGE
+            ? `${GE_SPECIALISATIONS.find(s => s.code === geSpec)?.name} · ${displayBatch} batch`
+            : `${displayBatch} batch`}
+        </span>
+        <span style={{ color: branch.color, fontWeight: 700 }}>{totalCredits} credits</span>
       </div>
 
       {loading ? (
         <div style={{ padding: "40px 0", textAlign: "center", color: C.textMuted, fontSize: 14, fontWeight: 600 }}>
           Loading curriculum…
         </div>
-      ) : shown.length === 0 ? (
+      ) : semesters.length === 0 ? (
         <div style={{ padding: "40px 0", textAlign: "center", color: C.textMuted, fontSize: 14 }}>
           No curriculum data available for this branch yet.
         </div>
-      ) : shown.map((sem) => (
+      ) : semesters.map((sem) => (
         <div key={sem.num} style={S.semBlock}>
           <div style={S.semHeader}>
             <span style={S.semNum}>Semester {sem.num}</span>
@@ -432,6 +469,7 @@ function BranchCurriculum({ branch, onBack, reduce }) {
                 <tr>
                   <th style={S.th}>Code</th>
                   <th style={{ ...S.th, textAlign: "left" }}>Course Title</th>
+                  {isGE && <th style={S.th}>Specialisation</th>}
                   <th style={S.th}>Credits</th>
                 </tr>
               </thead>
@@ -445,6 +483,11 @@ function BranchCurriculum({ branch, onBack, reduce }) {
                   >
                     <td style={{ ...S.td, ...S.codeCell, color: branch.color }}>{c.code}</td>
                     <td style={{ ...S.td, fontWeight: 500 }}>{c.title}</td>
+                    {isGE && (
+                      <td style={{ ...S.td, ...S.codeCell, fontSize: 11, color: c.specialisation ? branch.color : C.textDim }}>
+                        {c.specialisation || "—"}
+                      </td>
+                    )}
                     <td style={{ ...S.td, ...S.creditsCell }}>{c.credits}</td>
                   </tr>
                 ))}
@@ -593,7 +636,7 @@ const S = {
   tabBig: { fontSize: 14, fontWeight: 800, color: "inherit" },
   tabSmall: { fontSize: 11, fontWeight: 600, color: C.textDim },
 
-  yearMeta: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, fontWeight: 600, color: C.textMuted, padding: "0 2px 14px", borderBottom: `1px solid ${C.border}`, marginBottom: 22 },
+  yearMeta: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, fontWeight: 600, color: C.textMuted, padding: "0 2px 14px", borderBottom: `1px solid ${C.border}`, marginBottom: 22, marginTop: 4 },
 
   semBlock: { background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 20, overflow: "hidden" },
   semHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: `1px solid ${C.border}`, background: "#fafbfe" },

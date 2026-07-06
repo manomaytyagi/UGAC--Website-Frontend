@@ -25,7 +25,6 @@ function formatDate(iso) {
 function getDay(iso)   { return new Date(iso).getDate(); }
 function getMonth(iso) { return new Date(iso).toLocaleString("en-IN", { month: "short" }).toUpperCase(); }
 
-/* Detects small viewports so the modal can swap the Canva embed for a link on mobile. */
 function useIsMobile(bp = 640) {
   const [mobile, setMobile] = useState(
     typeof window !== "undefined" ? window.innerWidth <= bp : false
@@ -38,9 +37,6 @@ function useIsMobile(bp = 640) {
   return mobile;
 }
 
-/* Normalise a YouTube watch/short link into an embeddable URL.
-   playsinline=1 is what lets iPhones play inside the iframe instead of
-   refusing to start; rel=0 / modestbranding=1 keep it clean. */
 function toYouTubeEmbed(url) {
   if (!url) return "";
   const params = "playsinline=1&rel=0&modestbranding=1";
@@ -58,7 +54,6 @@ function toYouTubeEmbed(url) {
   }
 }
 
-/* Ensure a Canva /view link carries the ?embed flag so it renders in an iframe. */
 function toCanvaEmbed(url) {
   if (!url) return "";
   if (url.includes("?embed") || url.includes("&embed")) return url;

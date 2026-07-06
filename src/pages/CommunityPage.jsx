@@ -57,11 +57,6 @@ export default function CommunityPage({ type = "feedback" }) {
             <h1 className="cm-h1">{active.title}</h1>
             <p className="cm-intro">{active.intro}</p>
           </div>
-          <div className="cm-spectrum" aria-hidden>
-            {["#4f7cc4", "#4e9b72", "#d18a3e", "#c25b52"].map((c) => (
-              <span key={c} style={{ background: c }} />
-            ))}
-          </div>
         </header>
 
         <nav className="cm-tabs">

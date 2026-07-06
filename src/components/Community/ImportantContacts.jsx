@@ -1,38 +1,44 @@
-import { Contacts, C } from "./Contacts";
+import { useEffect, useState } from "react";
+import { Contacts } from "./Contacts";
+// NOTE: adjust this import if apiBridge.js lives elsewhere in your project.
+import { apiFetch } from "../../lib/apiBridge";
+import "../../styles/CommunityConnected.css";
 
-/* Important contacts, grouped by function and colour.
-   NOTE: names/emails below are placeholders following the @iitmandi.ac.in
-   pattern — replace with the live roster or wire to an API the same way
-   TeamPage does (apiFetch with this array as the fallback). */
+/* Important Contacts.
+   Reads apiFetch("/api/v1/important-contacts", FALLBACK), which groups the
+   `/faculty/` rows by their `type` column, in this fixed order:
+     1. Director   2. Deans   3. Student Body   4. Dept / School Chairs   5. School Offices
+   Empty groups are dropped. The FALLBACK below is the offline sample roster. */
 
-const GROUPS = [
+const FALLBACK = [
   {
-    id: "acad",
-    title: "Academics Team",
-    sub: "Council academic secretariat",
-    color: "#4f7cc4",
+    id: "director", type: "director", title: "Director",
+    sub: "Head of the institute", color: "#37548f",
+    people: [
+      { name: "Director", role: "Indian Institute of Technology Mandi", email: "director@iitmandi.ac.in", link: "#" },
+    ],
+  },
+  {
+    id: "deans", type: "dean", title: "Deans",
+    sub: "Deans & associate deans", color: "#4e9b72",
+    people: [
+      { name: "Dean — Academics", role: "Dean, Academic Affairs", email: "dean.acad@iitmandi.ac.in", link: "#" },
+      { name: "Associate Dean — Academics", role: "Academic Affairs", email: "adean.acad@iitmandi.ac.in", link: "#" },
+      { name: "Associate Dean — Courses", role: "Courses & Curriculum", email: "adean.courses@iitmandi.ac.in", link: "#" },
+    ],
+  },
+  {
+    id: "student", type: "student_body", title: "Student Body",
+    sub: "Council & student representatives", color: "#d18a3e",
     people: [
       { name: "Academic Secretary", role: "UG Academic Council", email: "acad.secy@iitmandi.ac.in", link: "#" },
       { name: "Associate Secretary — Academics", role: "Academics", email: "assoc.acad@iitmandi.ac.in", link: "#" },
-      { name: "Associate Secretary — Academics", role: "Academics", email: "assoc.acad2@iitmandi.ac.in", link: "#" },
-    ],
-  },
-  {
-    id: "courses",
-    title: "Courses Team",
-    sub: "Curriculum, registration & electives",
-    color: "#4e9b72",
-    people: [
       { name: "Courses Secretary", role: "Courses & Curriculum", email: "courses.secy@iitmandi.ac.in", link: "#" },
-      { name: "Associate — Courses", role: "Courses", email: "assoc.courses@iitmandi.ac.in", link: "#" },
-      { name: "Associate — Electives", role: "Courses", email: "electives@iitmandi.ac.in", link: "#" },
     ],
   },
   {
-    id: "chairs",
-    title: "Department / School Chairs",
-    sub: "Academic heads across schools",
-    color: "#d18a3e",
+    id: "chairs", type: "school_chair", title: "Department / School Chairs",
+    sub: "Academic heads across schools", color: "#c25b52",
     people: [
       { name: "Chair — SCEE", role: "Computing & Electrical Engineering", email: "chair.scee@iitmandi.ac.in", link: "#" },
       { name: "Chair — SMME", role: "Mechanical & Materials Engineering", email: "chair.smme@iitmandi.ac.in", link: "#" },
@@ -45,15 +51,12 @@ const GROUPS = [
     ],
   },
   {
-    id: "office",
-    title: "Institute & Other Contacts",
-    sub: "Deans and academic administration",
-    color: "#c25b52",
+    id: "offices", type: "school_office", title: "School Offices",
+    sub: "School administrative offices", color: "#6fa3d0",
     people: [
-      { name: "Dean — Academics", role: "Dean Academic Affairs", email: "dean.acad@iitmandi.ac.in", link: "#" },
-      { name: "Associate Dean — Academics", role: "Academic Affairs", email: "adean.acad@iitmandi.ac.in", link: "#" },
-      { name: "Academic Section", role: "Registration & records", email: "academics@iitmandi.ac.in", link: "#" },
-      { name: "Examination Cell", role: "Exams & grading", email: "exams@iitmandi.ac.in", link: "#" },
+      { name: "SCEE Office", role: "School of Computing & Electrical Engineering", email: "office.scee@iitmandi.ac.in", link: "#" },
+      { name: "SMME Office", role: "School of Mechanical & Materials Engineering", email: "office.smme@iitmandi.ac.in", link: "#" },
+      { name: "SBB Office", role: "School of Biosciences & Bioengineering", email: "office.sbb@iitmandi.ac.in", link: "#" },
     ],
   },
 ];
@@ -64,6 +67,7 @@ function ContactCard({ person, color }) {
       <div className="cm-cc-body">
         <h3 className="cm-cc-name" title={person.name}>{person.name}</h3>
         <p className="cm-cc-role">{person.role}</p>
+        {person.office && <p className="cmx-office">{person.office}</p>}
         <Contacts member={person} accent={color} />
       </div>
     </article>
@@ -71,16 +75,55 @@ function ContactCard({ person, color }) {
 }
 
 export default function ImportantContacts() {
-  const total = GROUPS.reduce((n, g) => n + g.people.length, 0);
+  const [groups, setGroups] = useState(FALLBACK);
+  const [source, setSource] = useState("loading");
+
+  useEffect(() => {
+    let alive = true;
+    apiFetch("/api/v1/important-contacts", FALLBACK).then(({ data, source }) => {
+      if (!alive) return;
+      setGroups(data);
+      setSource(source);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  const total = groups.reduce((n, g) => n + g.people.length, 0);
+  const director = groups.find((g) => g.type === "director" || g.id === "director");
+  const rest = groups.filter((g) => g !== director);
+
   return (
     <div>
-      <div className="cm-note">
-        <span className="cm-chip-ic" style={{ color: C.orange }}>●</span>
-        Sample roster — replace names &amp; emails with the live contacts ({total} listed).
+      <div className="cmx-note">
+        {source === "loading" && (
+          <><span className="cmx-badge cmx-badge--load">Loading…</span> Fetching contacts from the API.</>
+        )}
+        {source === "live" && (
+          <><span className="cmx-badge cmx-badge--live">Live</span> {total} contacts from the API.</>
+        )}
+        {source === "fallback" && (
+          <><span className="cmx-badge cmx-badge--sample">Sample</span> Sample roster — connect the API for the live contacts ({total} listed).</>
+        )}
       </div>
 
+      {director && director.people.length > 0 && (
+        <div
+          className="cmx-hero"
+          style={{ "--c": director.color, "--cbg": `${director.color}14`, "--cbd": `${director.color}45` }}
+        >
+          <span className="cm-eyebrow" style={{ color: director.color }}>{director.title}</span>
+          {director.people.map((p, i) => (
+            <div className="cmx-hero-body" key={p.id || p.email || i}>
+              <h3 className="cmx-hero-name">{p.name}</h3>
+              {p.role && <p className="cmx-hero-role">{p.role}</p>}
+              <Contacts member={p} accent={director.color} large />
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="cm-groups">
-        {GROUPS.map((g) => (
+        {rest.map((g) => (
           <section key={g.id}>
             <div className="cm-group-head" style={{ "--c": g.color }}>
               <span className="cm-group-dot" />
@@ -89,7 +132,9 @@ export default function ImportantContacts() {
               <span className="cm-group-sub">{g.sub}</span>
             </div>
             <div className="cm-contact-grid">
-              {g.people.map((p) => <ContactCard key={p.email} person={p} color={g.color} />)}
+              {g.people.map((p, i) => (
+                <ContactCard key={p.id || p.email || i} person={p} color={g.color} />
+              ))}
             </div>
           </section>
         ))}

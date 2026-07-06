@@ -5,7 +5,7 @@ import path from "path";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const backendTarget =
-    env.VITE_API_BASE || "https://ug-0ceb454fbac544039d40462fe569d71b.ecs.ap-south-1.on.aws/";
+    env.API_PROXY_TARGET || "https://ug-0ceb454fbac544039d40462fe569d71b.ecs.ap-south-1.on.aws/";
 
   return {
     plugins: [react()],

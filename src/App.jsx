@@ -8,6 +8,7 @@ import CoursesPage from "./pages/CoursesPage.jsx";
 import CourseDetailPage from "./pages/CourseDetailPage.jsx";
 import CurriculumPage from "./pages/CurriculumPage.jsx";
 import ResourcesPage from "./pages/ResourcesPage.jsx";
+import ProcedurePage from "./components/Resources/ProceduresPage.jsx";
 import FeedbackForm from "./pages/FeedbackForm.jsx";
 import CommunityPage from "./pages/CommunityPage.jsx";
 import NotFound from "./pages/NotFound.jsx";
@@ -63,14 +64,13 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Homepage />} />
         <Route path="/team" element={<TeamPage />} />
+        <Route path="/events" element={<EventsPage onBack={() => navigate("/")} />}/>
         <Route path="/courses" element={<CoursesPage />} />
         <Route path="/courses/:id" element={<CourseDetailPage />} />
         <Route path="/curriculum" element={<CurriculumPage />} />
         <Route path="/resources" element={<ResourcesPage />} />
-        <Route
-          path="/events"
-          element={<EventsPage onBack={() => navigate("/")} />}
-        />
+        <Route path="/resources/procedures/:slug" element={<ProcedurePage />} />
+        
         <Route path="/community" element={<Navigate to="/community/feedback" replace />} />
         <Route path="/community/feedback" element={<CommunityPage type="feedback" />} />
         <Route
