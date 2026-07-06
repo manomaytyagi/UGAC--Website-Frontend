@@ -83,6 +83,62 @@ export const courseTracks = [
   "Student reviews"
 ];
 
+// Used by CoursesPreview to go one level deeper than the track list above,
+// so the section doesn't just repeat the Hero's "curriculum" callout.
+export const curriculumHighlights = [
+  { school: "Computing & Data Sciences", detail: "CSE, DSAI, MNC, DSE" },
+  { school: "Core Engineering", detail: "EE, ME, CE, MSE" },
+  { school: "Emerging & Interdisciplinary", detail: "VLSI, EP, QSE, Bio Engg." }
+];
+
+// Fallback shown by the Hero spotlight card (§3.3 Option A) and the
+// Events Spotlight section (§4) when the live API is unavailable.
+export const eventsFallback = [
+  {
+    id: "fallback-1",
+    title: "Academic Grievance Open House",
+    desc: "A student forum to raise course, grading, timetable, and policy concerns with UGAC representatives.",
+    date: null,
+    time: null,
+    venue: null,
+    tag: "Open Forum"
+  }
+];
+
+// Fallback shown by the Notifications section (§5) when the live
+// Announcements API is unavailable. Mirrors the shape returned by
+// apiBridge's reshapeAnnouncements().
+export const announcementsFallback = [
+  {
+    id: "fallback-mom-1",
+    title: "General Body Meeting — Minutes",
+    content: "Minutes from the latest UGAC general body meeting are available on request from the council.",
+    category: "Minutes of Meetings",
+    attachmentUrl: null,
+    publishedAt: null,
+    isPinned: false,
+    isActive: true
+  },
+  {
+    id: "fallback-circular-1",
+    title: "Academic Office Circular",
+    content: "Check the Resources page for the latest circulars from the Dean of Academic Affairs.",
+    category: "Circulars",
+    attachmentUrl: null,
+    publishedAt: null,
+    isPinned: false,
+    isActive: true
+  }
+];
+
+// Curriculum highlight shown as the third rotating card in the Hero
+// spotlight (alongside the nearest event and the latest circular).
+export const curriculumSpotlight = {
+  label: "Curriculum",
+  headline: "6 schools, 40+ courses tracked",
+  desc: "Structured course maps across every branch, kept current every semester."
+};
+
 export const resources = [
   { title: "Academic calendar", desc: "Semester dates, exam windows, add-drop periods, and important deadlines." },
   { title: "Forms and policies", desc: "Common forms, ordinances, grievance paths, and committee-level documents." },

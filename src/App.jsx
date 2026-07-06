@@ -9,7 +9,6 @@ import CourseDetailPage from "./pages/CourseDetailPage.jsx";
 import CurriculumPage from "./pages/CurriculumPage.jsx";
 import ResourcesPage from "./pages/ResourcesPage.jsx";
 import ProcedurePage from "./components/Resources/ProceduresPage.jsx";
-import FeedbackForm from "./pages/FeedbackForm.jsx";
 import CommunityPage from "./pages/CommunityPage.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
@@ -81,7 +80,6 @@ export default function App() {
           path="/community/faculty-advisers"
           element={<CommunityPage type="faculty-advisers" />}
         />
-        <Route path="/feedback" element={<FeedbackForm />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </>

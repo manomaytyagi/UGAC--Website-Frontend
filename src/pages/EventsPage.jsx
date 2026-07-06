@@ -108,21 +108,25 @@ function EventCardSkeleton() {
 function UpcomingCard({ event }) {
   const isPast = new Date(event.date) < new Date();
   const isMobile = useIsMobile();
-  const [open, setOpen] = useState(false);   // mobile-only reveal toggle
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  const overlayVisible = isMobile ? open : hovered;
 
   return (
     <div
-      className={`uc-up-card${isMobile && open ? " uc-up-open" : ""}`}
       style={S.upCard}
       tabIndex={0}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
     >
-      {/* Full-bleed banner (the only thing visible until hover) */}
+      {/* Full-bleed banner — sizes to image intrinsic height */}
       <div style={S.upMedia}>
         <EventBanner bannerKey={event.banner_key} title={event.title} />
         <div style={S.upTopScrim} />
       </div>
 
-      {/* Mobile: small tap-to-reveal button on the image */}
+      {/* Mobile: tap-to-reveal button sitting on top of the image */}
       {isMobile && !open && (
         <button style={S.upMobileBtn} onClick={() => setOpen(true)}>
           View Details
@@ -135,13 +139,16 @@ function UpcomingCard({ event }) {
         <span style={S.dateBadgeMonth}>{getMonth(event.date)}</span>
       </div>
 
-      {/* Always-visible: audience / year-program badge (replaces the tag here) */}
+      {/* Always-visible: audience badge */}
       {event.audience && (
         <span style={S.audienceBadge}>{event.audience}</span>
       )}
 
-      {/* Reveal panel: rises on hover (desktop) or via the button (mobile) */}
-      <div className="uc-up-overlay" style={S.upOverlay}>
+      {/* Overlay: slides up on hover (desktop) or tap (mobile) */}
+      <div style={{
+        ...S.upOverlay,
+        transform: overlayVisible ? "translateY(0)" : "translateY(100%)",
+      }}>
         {isMobile && (
           <button
             style={S.upCloseBtn}
@@ -548,6 +555,7 @@ const S = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
     gap: 22,
+    alignItems: "start",
   },
   card: {
     background: C.white, border: `1px solid ${C.border}`,
@@ -559,7 +567,6 @@ const S = {
   /* ── Upcoming card: image-only until hover ───────────────── */
   upCard: {
     position: "relative",
-    height: 310,
     border: `1px solid ${C.border}`,
     borderRadius: 14,
     overflow: "hidden",
@@ -567,8 +574,10 @@ const S = {
     boxShadow: "0 2px 12px rgba(13,27,62,0.06)",
     transition: "box-shadow 0.25s ease",
     cursor: "default",
+    display: "flex",
+    flexDirection: "column",
   },
-  upMedia: { position: "absolute", inset: 0 },
+  upMedia: { position: "relative", width: "100%", flexShrink: 0 },
   upTopScrim: {
     position: "absolute", top: 0, left: 0, right: 0, height: 90,
     background: "linear-gradient(to bottom, rgba(13,27,62,0.35), rgba(13,27,62,0))",
@@ -600,17 +609,19 @@ const S = {
   upOverlay: {
     position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 2,
     padding: "18px 18px 20px",
-    background: "linear-gradient(to top, rgba(13,27,62,0.97) 60%, rgba(13,27,62,0.82))",
+    background: "linear-gradient(to top, rgba(13,27,62,0.97) 60%, rgba(13,27,62,0))",
     display: "flex", flexDirection: "column",
+    transform: "translateY(100%)",
+    transition: "transform 0.3s ease",
   },
   upTitle: { fontSize: 16, fontWeight: 800, color: C.white, margin: "0 0 8px", lineHeight: 1.3 },
   upDesc:  { fontSize: 12.5, lineHeight: 1.6, color: "rgba(255,255,255,0.82)", margin: "0 0 12px" },
   upMeta:  { display: "flex", flexWrap: "wrap", gap: "4px 14px", marginBottom: 4 },
   upMetaItem: { fontSize: 11.5, color: "rgba(255,255,255,0.7)", fontWeight: 500 },
 
-  bannerImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+  bannerImg: { width: "100%", height: "auto", display: "block" },
   bannerPlaceholder: {
-    width: "100%", height: "100%",
+    width: "100%", height: 220,
     background: `linear-gradient(135deg, ${C.navyDeep}, ${C.navyMid})`,
     display: "flex", alignItems: "center", justifyContent: "center",
   },

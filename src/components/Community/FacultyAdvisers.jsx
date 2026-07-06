@@ -1,19 +1,8 @@
 import { useEffect, useState } from "react";
 import { Contacts } from "./Contacts";
-// NOTE: adjust this import if apiBridge.js lives elsewhere in your project
-// (e.g. "../../api/apiBridge" or "../../lib/apiBridge").
 import { apiFetch, branchMeta } from "../../lib/apiBridge";
-import "../../styles/CommunityConnected.css";
+import "../../styles/CommunityPage.css";
 
-/* Faculty Advisers.
-   Reads the live roster from apiFetch("/api/v1/faculty-advisers", FALLBACK),
-   which returns branches shaped as:
-     { id, code, name, color, count, advisers:[{ name, email, link, office,
-       batch, batchLabel }] }
-   Each branch's adviser count and the adviser names come straight from the API
-   (one faculty row per adviser, differentiated by `branch` + `batch`).        */
-
-// Established branches — used only to build the offline fallback roster.
 const ESTABLISHED = [
   ["CSE", "Computer Science and Engineering"],
   ["DSE", "Data Science and Engineering"],
@@ -39,8 +28,6 @@ const NAME_POOL = [
   "Dr. K. Menon", "Prof. V. Sharma", "Dr. P. Bose", "Prof. N. Das",
 ];
 
-// Sample data so the layout previews before the API is connected. Counts vary
-// per branch on purpose, to show the count is driven by data, not hardcoded.
 function buildFallback() {
   return ESTABLISHED.map(([code, name], bi) => {
     const meta = branchMeta(code);

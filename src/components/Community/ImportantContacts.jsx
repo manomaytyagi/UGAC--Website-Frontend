@@ -1,14 +1,7 @@
 import { useEffect, useState } from "react";
 import { Contacts } from "./Contacts";
-// NOTE: adjust this import if apiBridge.js lives elsewhere in your project.
 import { apiFetch } from "../../lib/apiBridge";
-import "../../styles/CommunityConnected.css";
-
-/* Important Contacts.
-   Reads apiFetch("/api/v1/important-contacts", FALLBACK), which groups the
-   `/faculty/` rows by their `type` column, in this fixed order:
-     1. Director   2. Deans   3. Student Body   4. Dept / School Chairs   5. School Offices
-   Empty groups are dropped. The FALLBACK below is the offline sample roster. */
+import "../../styles/CommunityPage.css";
 
 const FALLBACK = [
   {

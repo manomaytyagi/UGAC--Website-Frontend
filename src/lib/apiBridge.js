@@ -104,6 +104,32 @@ function reshapeEvents(raw) {
   return { upcoming, past };
 }
 
+function reshapeAnnouncement(a) {
+  return {
+    id: a.id,
+    title: a.title || "",
+    content: a.content || "",
+    category: a.category || "Announcement",
+    attachmentUrl: a.attachment_url || null,
+    publishedAt: a.published_at || null,
+    isPinned: Boolean(a.is_pinned),
+    isActive: a.is_active !== false,
+  };
+}
+
+function reshapeAnnouncements(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  return list
+    .map(reshapeAnnouncement)
+    .filter((a) => a.isActive)
+    .sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      const aTime = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const bTime = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+}
+
 export async function apiFetch(path, fallbackData) {
   if (path === "/api/v1/team") {
     return withFallback(async () => {
@@ -116,6 +142,13 @@ export async function apiFetch(path, fallbackData) {
     return withFallback(async () => {
       const events = await request("/events/");
       return reshapeEvents(events);
+    }, fallbackData);
+  }
+
+  if (path === "/api/v1/announcements") {
+    return withFallback(async () => {
+      const announcements = await request("/announcements/");
+      return reshapeAnnouncements(announcements);
     }, fallbackData);
   }
 
