@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/api-proxy/:path*",
-      "destination": "https://ug-0ceb454fbac544039d40462fe569d71b.ecs.ap-south-1.on.aws/:path*"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
