@@ -312,6 +312,9 @@ body.menu-open{overflow:hidden}
   /* ---- Mobile: padding above the Sections and Community h4 labels ---- */
   .foot__in > div:not(.foot__brand) { padding-top: var(--s4) }
   .foot h4 { padding-top: var(--s3) }
+
+  /* ---- Mobile: indent footer columns so text has breathing room from the left edge ---- */
+  .foot__in { padding-left: clamp(20px, 6vw, 40px); padding-right: clamp(20px, 6vw, 40px) }
 }
 @media(prefers-reduced-motion:reduce){
   *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
