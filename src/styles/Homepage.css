@@ -115,8 +115,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{
 .nav__ham[aria-expanded="true"] .nav__ham-line{opacity:0}
 
 /* Mobile drawer */
-body.menu-open{overflow:hidden}
-.mobile-menu{position:fixed;inset:0;z-index:80;background:var(--cream);
+.mobile-menu{position:fixed;inset:0;z-index:60;background:var(--cream);
   padding:calc(64px + var(--s6)) var(--edge) var(--s7);
   display:flex;flex-direction:column;overflow-y:auto;
   visibility:hidden;opacity:0;transform:translateY(-6px);
@@ -262,10 +261,11 @@ body.menu-open{overflow:hidden}
 /* ============ FOOTER ============ */
 .foot{border-top:3px solid var(--ink);background:var(--white)}
 .foot__in{padding:var(--s8) 0 var(--s6);display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:var(--s6)}
+.foot__brand{padding-left:var(--s2)}
 .foot__brand .brand__mark{font-size:22px}
 .foot__brand p{font-family:var(--f-read);font-size:14.5px;color:var(--muted);margin-top:var(--s4);max-width:34ch}
 .foot h4{font-family:var(--f-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:var(--s4)}
-.foot__links{display:flex;flex-direction:column;gap:10px}
+.foot__links{display:flex;flex-direction:column;gap:10px;padding-left:var(--s2)}
 .foot__links a{font-size:14.5px;color:var(--ink);width:fit-content;transition:color .2s}
 .foot__links a:hover{color:var(--ink)}
 .foot__bar{border-top:1px solid var(--line);padding:var(--s5) 0;display:flex;justify-content:space-between;gap:var(--s4);flex-wrap:wrap;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;color:var(--faint)}
