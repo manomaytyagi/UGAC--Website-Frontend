@@ -115,7 +115,8 @@ a:focus-visible,button:focus-visible,summary:focus-visible{
 .nav__ham[aria-expanded="true"] .nav__ham-line{opacity:0}
 
 /* Mobile drawer */
-.mobile-menu{position:fixed;inset:0;z-index:60;background:var(--cream);
+body.menu-open{overflow:hidden}
+.mobile-menu{position:fixed;inset:0;z-index:80;background:var(--cream);
   padding:calc(64px + var(--s6)) var(--edge) var(--s7);
   display:flex;flex-direction:column;overflow-y:auto;
   visibility:hidden;opacity:0;transform:translateY(-6px);

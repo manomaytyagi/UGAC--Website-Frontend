@@ -247,14 +247,23 @@ function normalizeFacultyType(raw) {
   return s;
 }
 
+function inferTypeFromDesignation(designation) {
+  const s = (designation || "").toLowerCase().replace(/[\s._-]+/g, "");
+  if (s.includes("facultyadvis") ) return "adviser";
+  if (s.includes("adviser") || s.includes("advisor")) return "adviser";
+  if (s.includes("director")) return "director";
+  if (s.includes("dean")) return "dean";
+  if (s.includes("chair")) return "school_chair";
+  return null;
+}
+
 function normalizeFaculty(m) {
   const designation = _pick(m, "designation", "role", "position") || "";
   let type = normalizeFacultyType(_pick(m, "type", "category", "contact_type"));
 
-  // If `type` is absent, infer from the designation as a fallback.
-  if (!type && /chair/i.test(designation)) type = "school_chair";
-  if (!type && /dean/i.test(designation)) type = "dean";
-  if (!type && /director/i.test(designation)) type = "director";
+  // If `type` is absent (e.g. admin stores "Faculty Advisor" in designation
+  // but never sets a separate type column), infer it from designation.
+  if (!type) type = inferTypeFromDesignation(designation) || "";
 
   return {
     id: m.id ?? _pick(m, "email", "name"),
@@ -264,7 +273,8 @@ function normalizeFaculty(m) {
     link: _pick(m, "linkedin_url", "linkedin", "link", "profile_url"),
     photo: _pick(m, "photo_url", "photo", "image_url"),
     designation,
-    department: _pick(m, "department", "department_name", "dept") || "",
+    // `department_id` is the UUID key the API returns; also accept human-readable variants.
+    department: _pick(m, "department", "department_name", "dept", "department_id") || "",
     office: _pick(m, "office_location", "office"),
     branch: _pick(m, "branch", "branch_code"),
     batch: _pick(m, "batch", "batch_year", "year"),
