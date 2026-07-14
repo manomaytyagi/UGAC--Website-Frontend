@@ -261,11 +261,10 @@ body.menu-open{overflow:hidden}
 /* ============ FOOTER ============ */
 .foot{border-top:3px solid var(--ink);background:var(--white)}
 .foot__in{padding:var(--s8) 0 var(--s6);display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:var(--s6)}
-.foot__brand{padding-left:var(--s2)}
 .foot__brand .brand__mark{font-size:22px}
 .foot__brand p{font-family:var(--f-read);font-size:14.5px;color:var(--muted);margin-top:var(--s4);max-width:34ch}
 .foot h4{font-family:var(--f-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:var(--s4)}
-.foot__links{display:flex;flex-direction:column;gap:10px;padding-left:var(--s2)}
+.foot__links{display:flex;flex-direction:column;gap:10px}
 .foot__links a{font-size:14.5px;color:var(--ink);width:fit-content;transition:color .2s}
 .foot__links a:hover{color:var(--ink)}
 .foot__bar{border-top:1px solid var(--line);padding:var(--s5) 0;display:flex;justify-content:space-between;gap:var(--s4);flex-wrap:wrap;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;color:var(--faint)}
@@ -300,6 +299,19 @@ body.menu-open{overflow:hidden}
   .foot__bar{flex-direction:column;gap:6px}
   .site-head__in{height:60px}
   .mobile-menu{padding-top:calc(60px + var(--s6))}
+
+  /* ---- Mobile: extra overall padding ---- */
+  :root { --edge: clamp(24px, 6vw, 48px) }
+  .section { padding: clamp(64px, 10vw, 96px) 0 }
+
+  /* ---- Mobile: center the footer brand (title + description) ---- */
+  .foot__brand { text-align: center }
+  .foot__brand p { max-width: 100%; margin-left: auto; margin-right: auto }
+  .foot__brand .brand__mark { display: block }
+
+  /* ---- Mobile: padding above the Sections and Community h4 labels ---- */
+  .foot__in > div:not(.foot__brand) { padding-top: var(--s4) }
+  .foot h4 { padding-top: var(--s3) }
 }
 @media(prefers-reduced-motion:reduce){
   *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
