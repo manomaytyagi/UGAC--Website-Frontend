@@ -576,7 +576,7 @@ export const api = {
   async curriculum(deptId, fallbackData, { specialisation } = {}) {
     return withFallback(async () => {
       const [curricula, branches] = await Promise.all([
-        request("/curricula/"),
+        request("/curriculum/"),
         request("/branches/").catch(() => []),
       ]);
 
@@ -595,7 +595,7 @@ export const api = {
       }
       if (!match) match = curricula[0];
 
-      const ccs = await request(`/curricula/${match.id}/courses`);
+      const ccs = await request(`/curriculum/${match.id}/courses`);
 
       const filteredCcs = (ccs || []).filter((cc) => {
         if (!specialisation) return true;
