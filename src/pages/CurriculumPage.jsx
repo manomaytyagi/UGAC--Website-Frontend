@@ -41,6 +41,9 @@ const FALLBACK_BRANCHES = Object.entries(BRANCH_META).map(([code, m]) => ({
 
 const FALLBACK_BATCHES = ["2026", "2025", "2024", "2023"];
 
+/* Card year strip: same source of truth as the batch tabs, shown ascending. */
+const CARD_YEARS = [...FALLBACK_BATCHES].sort();
+
 function tint(hex, a) {
   const x = hex.replace("#", "");
   const r = parseInt(x.slice(0, 2), 16), g = parseInt(x.slice(2, 4), 16), b = parseInt(x.slice(4, 6), 16);
@@ -205,48 +208,86 @@ function TableFace({ seatsBranches, onPick, hovered, setHovered, reduce }) {
   );
 }
 
-function CreditCard({ branch }) {
-  const [credits, setCredits] = useState(branch.credits);
+function CreditCard({ branch, year, onYear }) {
+  const [credits, setCredits] = useState(null);
+  const [loading, setLoading] = useState(false);
 
+  /* Nothing is fetched — and nothing is shown — until a year is picked. */
   useEffect(() => {
-    if (credits) return;
-    api.curriculum(branch.id, null)
-      .then((res) => { if (res.data?.credits) setCredits(res.data.credits); })
-      .catch(() => null);
-  }, [branch.id]);
+    if (!year) { setCredits(null); setLoading(false); return; }
+    let cancelled = false;
+    setCredits(null);
+    setLoading(true);
+    api.curriculum(branch.id, null, { batchYear: year })
+      .then((res) => { if (!cancelled && res.data?.credits) setCredits(res.data.credits); })
+      .catch(() => null)
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [branch.id, year]);
 
-  if (!credits) return (
-    <div style={{ ...S.creditCard, animation: "fadeUp .25s ease both" }}>
-      <div style={S.ccHead}>
-        <span style={{ ...S.ccDot, background: branch.color }} />
-        <span style={S.ccBranch}>{branch.name}</span>
-      </div>
-      <p style={{ fontSize: 13, color: C.textMuted, margin: 0 }}>Loading credit breakdown…</p>
-    </div>
-  );
-  const max = Math.max(...credits.rows.map((r) => r.credits));
+  const rows = credits?.rows ?? [];
+  const max  = rows.length ? Math.max(...rows.map((r) => r.credits)) : 0;
+
   return (
     <div style={{ ...S.creditCard, animation: "fadeUp .25s ease both" }}>
       <div style={S.ccHead}>
         <span style={{ ...S.ccDot, background: branch.color }} />
         <span style={S.ccBranch}>{branch.name}</span>
-        <span style={S.ccTag}>Credits</span>
       </div>
-      <div style={S.ccTotalRow}>
-        <span style={{ ...S.ccTotal, color: branch.color }}>{credits.total}</span>
-        <span style={S.ccTotalLabel}>total credits to graduate</span>
+
+      <div style={S.ccYearRow} role="tablist" aria-label="Batch year">
+        {CARD_YEARS.map((y) => {
+          const on = year === y;
+          return (
+            <button
+              key={y}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              data-on={String(on)}
+              className="uc-cc-year"
+              onClick={() => onYear(y)}
+              style={{
+                ...S.ccYearTab,
+                ...(on ? {
+                  borderColor: branch.color,
+                  color: branch.color,
+                  background: tint(branch.color, 0.1),
+                  fontWeight: 800,
+                } : {}),
+              }}
+            >
+              {y}
+            </button>
+          );
+        })}
       </div>
-      <div style={S.ccRows}>
-        {credits.rows.map((r) => (
-          <div key={r.label} style={S.ccRow}>
-            <span style={S.ccLabel}>{r.label}</span>
-            <div style={S.ccTrack}>
-              <div style={{ ...S.ccFill, width: `${(r.credits / max) * 100}%`, background: branch.color }} />
-            </div>
-            <span style={S.ccVal}>{r.credits}</span>
+
+      {!year ? (
+        <p style={S.ccHint}>Pick a batch year above to see the credit breakdown.</p>
+      ) : loading ? (
+        <p style={S.ccHint}>Loading credit breakdown…</p>
+      ) : !rows.length ? (
+        <p style={S.ccHint}>No credit breakdown published for the {year} batch yet.</p>
+      ) : (
+        <>
+          <div style={S.ccTotalRow}>
+            <span style={{ ...S.ccTotal, color: branch.color }}>{credits.total}</span>
+            <span style={S.ccTotalLabel}>total credits to graduate</span>
           </div>
-        ))}
-      </div>
+          <div style={S.ccRows}>
+            {rows.map((r) => (
+              <div key={r.label} style={S.ccRow}>
+                <span style={S.ccLabel}>{r.label}</span>
+                <div style={S.ccTrack}>
+                  <div style={{ ...S.ccFill, width: `${(r.credits / max) * 100}%`, background: branch.color }} />
+                </div>
+                <span style={S.ccVal}>{r.credits}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -313,15 +354,22 @@ function BranchCurriculum({ branch, onBack, reduce }) {
   const [batches, setBatches]       = useState(FALLBACK_BATCHES);
   const [semesters, setSemesters]   = useState([]);
   const [loading, setLoading]       = useState(true);
-  const [geSpec, setGeSpec]         = useState(GE_SPECIALISATIONS[0].code);
+  const [geSpec, setGeSpec]         = useState(null);
 
   const isGE = branch.id === "GE";
 
   useEffect(() => {
+    // GE: don't fetch until a specialisation has been chosen.
+    if (isGE && !geSpec) { setLoading(false); setSemesters([]); return; }
+
     let cancelled = false;
     setLoading(true);
     setSemesters([]);
-    const opts = isGE && geSpec ? { specialisation: geSpec } : {};
+
+    const opts = {};
+    if (isGE && geSpec) opts.specialisation = geSpec;
+    if (batch) opts.batchYear = batch;
+
     api.curriculum(branch.id, null, opts).then((res) => {
       if (cancelled) return;
       const data = res.data;
@@ -329,19 +377,22 @@ function BranchCurriculum({ branch, onBack, reduce }) {
         setSemesters(data.semesters || []);
         if (data.batches?.length) {
           setBatches(data.batches);
-          setBatch((b) => b || data.batches[0]);
-        } else {
+          // Non-GE auto-selects the latest batch; GE waits for a pick.
+          if (!isGE) setBatch((b) => b || data.batches[0]);
+        } else if (!isGE) {
           setBatch((b) => b || FALLBACK_BATCHES[0]);
         }
       }
       setLoading(false);
     }).catch(() => { if (!cancelled) setLoading(false); });
+
     return () => { cancelled = true; };
-  }, [branch.id, isGE, geSpec]);
+  }, [branch.id, isGE, geSpec, batch]);
 
   const totalCredits = semesters.reduce((t, s) => t + s.courses.reduce((a, c) => a + c.credits, 0), 0);
   const displayBatches = batches.length ? batches : FALLBACK_BATCHES;
-  const displayBatch   = batch || displayBatches[0];
+  // GE requires an explicit batch pick; other branches default to the latest.
+  const activeBatch    = isGE ? batch : (batch || displayBatches[0]);
 
   const mobileTab = {
     ...S.tab,
@@ -376,126 +427,132 @@ function BranchCurriculum({ branch, onBack, reduce }) {
         : S.controlRow
       }>
         {}
+        {/* Step 1 (GE only): choose a specialisation before anything else */}
         {isGE && (
           <div style={S.controlGroup}>
-            <span style={S.groupLabel}>Specialisation</span>
-            <div style={{ position: "relative", display: "inline-block" }}>
-              <select
-                value={geSpec}
-                onChange={(e) => setGeSpec(e.target.value)}
-                style={{
-                  appearance: "none",
-                  WebkitAppearance: "none",
-                  background: C.white,
-                  border: `1.5px solid ${branch.color}`,
-                  borderRadius: 12,
-                  padding: "10px 44px 10px 16px",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: branch.color,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                  outline: "none",
-                  boxShadow: "0 4px 14px rgba(13,27,62,.08)",
-                  minWidth: 220,
-                }}
-              >
-                {GE_SPECIALISATIONS.map((sp) => (
-                  <option key={sp.code} value={sp.code}>{sp.name}</option>
-                ))}
-              </select>
-              <svg
-                width="14" height="14" viewBox="0 0 24 24" fill="none"
-                style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
-                aria-hidden="true"
-              >
-                <path d="M6 9l6 6 6-6" stroke={branch.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+            <span style={S.groupLabel}>
+              {geSpec ? "Specialisation" : "Step 1 · Choose your specialisation"}
+            </span>
+            <div style={S.tabRow}>
+              {GE_SPECIALISATIONS.map((sp) => {
+                const on = geSpec === sp.code;
+                return (
+                  <button
+                    key={sp.code}
+                    onClick={() => { if (!on) { setGeSpec(sp.code); setBatch(null); } }}
+                    style={{
+                      ...S.tab,
+                      ...(on ? { ...S.tabActive, borderColor: branch.color, color: branch.color } : {}),
+                    }}
+                  >
+                    <span style={S.tabBig}>{sp.name}</span>
+                    <span style={S.tabSmall}>{sp.code}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
 
-        <div style={mobile
-          ? { display: "flex", flexDirection: "column", gap: 6, width: "100%" }
-          : S.controlGroup
-        }>
-          <span style={S.groupLabel}>Batch</span>
-          <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", width: "100%" }}>
-            {displayBatches.map((b) => (
-              <button
-                key={b}
-                onClick={() => setBatch(b)}
-                style={{
-                  ...(mobile ? mobileTab : S.tab),
-                  ...(displayBatch === b ? { ...S.tabActive, borderColor: branch.color, color: branch.color } : {}),
-                }}
-              >
-                <span style={S.tabBig}>{b}</span>
-                {!mobile && <span style={S.tabSmall}>entry</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div style={S.yearMeta}>
-        <span>
-          {isGE
-            ? `${GE_SPECIALISATIONS.find(s => s.code === geSpec)?.name} · ${displayBatch} batch`
-            : `${displayBatch} batch`}
-        </span>
-        <span style={{ color: branch.color, fontWeight: 700 }}>{totalCredits} credits</span>
-      </div>
-
-      {loading ? (
-        <div style={{ padding: "40px 0", textAlign: "center", color: C.textMuted, fontSize: 14, fontWeight: 600 }}>
-          Loading curriculum…
-        </div>
-      ) : semesters.length === 0 ? (
-        <div style={{ padding: "40px 0", textAlign: "center", color: C.textMuted, fontSize: 14 }}>
-          No curriculum data available for this branch yet.
-        </div>
-      ) : semesters.map((sem) => (
-        <div key={sem.num} style={S.semBlock}>
-          <div style={S.semHeader}>
-            <span style={S.semNum}>Semester {sem.num}</span>
-            <span style={{ ...S.semCredits, color: branch.color }}>
-              {sem.courses.reduce((s, c) => s + c.credits, 0)} credits
-            </span>
-          </div>
-          <div style={S.tableScroll}>
-            <table style={S.table}>
-              <thead>
-                <tr>
-                  <th style={S.th}>Code</th>
-                  <th style={{ ...S.th, textAlign: "left" }}>Course Title</th>
-                  {isGE && <th style={S.th}>Specialisation</th>}
-                  <th style={S.th}>Credits</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sem.courses.map((c) => (
-                  <tr
-                    key={c.code}
-                    style={{ ...S.tr, cursor: c.id ? "pointer" : "default" }}
-                    onClick={() => c.id && navigate(`/courses/${c.id}`)}
-                    title={c.id ? "View course details" : undefined}
+        {/* Step 2: choose a batch year (GE waits until a specialisation is set) */}
+        {(!isGE || geSpec) && (
+          <div style={mobile
+            ? { display: "flex", flexDirection: "column", gap: 6, width: "100%" }
+            : S.controlGroup
+          }>
+            <span style={S.groupLabel}>{isGE ? "Step 2 · Choose your batch year" : "Batch"}</span>
+            <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", width: "100%" }}>
+              {displayBatches.map((b) => {
+                const on = activeBatch === b;
+                return (
+                  <button
+                    key={b}
+                    onClick={() => setBatch(b)}
+                    style={{
+                      ...(mobile ? mobileTab : S.tab),
+                      ...(on ? { ...S.tabActive, borderColor: branch.color, color: branch.color } : {}),
+                    }}
                   >
-                    <td style={{ ...S.td, ...S.codeCell, color: branch.color }}>{c.code}</td>
-                    <td style={{ ...S.td, fontWeight: 500 }}>{c.title}</td>
-                    {isGE && (
-                      <td style={{ ...S.td, ...S.codeCell, fontSize: 11, color: c.specialisation ? branch.color : C.textDim }}>
-                        {c.specialisation || "—"}
-                      </td>
-                    )}
-                    <td style={{ ...S.td, ...S.creditsCell }}>{c.credits}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    <span style={S.tabBig}>{b}</span>
+                    {!mobile && <span style={S.tabSmall}>entry</span>}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        )}
+      </div>
+
+      {/* Step 3: the curriculum. GE stays gated until spec + year are chosen. */}
+      {isGE && !geSpec ? (
+        <p style={S.ccHint}>Choose a specialisation above to begin.</p>
+      ) : isGE && !batch ? (
+        <p style={S.ccHint}>
+          Now pick a batch year to view the{" "}
+          {GE_SPECIALISATIONS.find((s) => s.code === geSpec)?.name} curriculum.
+        </p>
+      ) : (
+        <>
+          <div style={S.yearMeta}>
+            <span>
+              {isGE
+                ? `${GE_SPECIALISATIONS.find((s) => s.code === geSpec)?.name} · ${activeBatch} batch`
+                : `${activeBatch} batch`}
+            </span>
+            <span style={{ color: branch.color, fontWeight: 700 }}>{totalCredits} credits</span>
+          </div>
+
+          {loading ? (
+            <div style={{ padding: "40px 0", textAlign: "center", color: C.textMuted, fontSize: 14, fontWeight: 600 }}>
+              Loading curriculum…
+            </div>
+          ) : semesters.length === 0 ? (
+            <div style={{ padding: "40px 0", textAlign: "center", color: C.textMuted, fontSize: 14 }}>
+              No curriculum data available for this branch yet.
+            </div>
+          ) : semesters.map((sem) => (
+            <div key={sem.num} style={S.semBlock}>
+              <div style={S.semHeader}>
+                <span style={S.semNum}>Semester {sem.num}</span>
+                <span style={{ ...S.semCredits, color: branch.color }}>
+                  {sem.courses.reduce((s, c) => s + c.credits, 0)} credits
+                </span>
+              </div>
+              <div style={S.tableScroll}>
+                <table style={S.table}>
+                  <thead>
+                    <tr>
+                      <th style={S.th}>Code</th>
+                      <th style={{ ...S.th, textAlign: "left" }}>Course Title</th>
+                      {isGE && <th style={S.th}>Specialisation</th>}
+                      <th style={S.th}>Credits</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sem.courses.map((c) => (
+                      <tr
+                        key={c.code}
+                        style={{ ...S.tr, cursor: c.id ? "pointer" : "default" }}
+                        onClick={() => c.id && navigate(`/courses/${c.id}`)}
+                        title={c.id ? "View course details" : undefined}
+                      >
+                        <td style={{ ...S.td, ...S.codeCell, color: branch.color }}>{c.code}</td>
+                        <td style={{ ...S.td, fontWeight: 500 }}>{c.title}</td>
+                        {isGE && (
+                          <td style={{ ...S.td, ...S.codeCell, fontSize: 11, color: c.specialisation ? branch.color : C.textDim }}>
+                            {c.specialisation || "—"}
+                          </td>
+                        )}
+                        <td style={{ ...S.td, ...S.creditsCell }}>{c.credits}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -507,6 +564,14 @@ export default function CurriculumPage() {
   const [reduce, setReduce]             = useState(false);
   const [isDesktop, setIsDesktop]       = useState(true);
   const [hoveredBranch, setHoveredBranch] = useState(null);
+  const [cardBranch, setCardBranch]     = useState(null);
+  const [year, setYear]                 = useState(null);
+
+  /* The head clears `hovered` on mouseleave. Latch the last real branch so the
+     card (and its year tabs) survives the trip from the table to the card. */
+  useEffect(() => {
+    if (hoveredBranch) setCardBranch(hoveredBranch);
+  }, [hoveredBranch]);
 
   useEffect(() => {
     // BRANCH_META is authoritative for the 12 branches.
@@ -548,9 +613,9 @@ export default function CurriculumPage() {
                 <h1 style={S.pageH1}>Curriculum</h1>
                 <p style={S.lede}>Sixteen branches, one table. Pick a seat to open its programme.</p>
                 <div style={S.creditSlot}>
-                  {hoveredBranch
-                    ? <CreditCard branch={hoveredBranch} />
-                    : <div style={S.creditPrompt}>Hover a branch to see its credit breakdown</div>}
+                  {cardBranch
+                    ? <CreditCard branch={cardBranch} year={year} onYear={setYear} />
+                    : <div style={S.creditPrompt}>Hover a branch on the table, then pick a batch year to see its credit breakdown.</div>}
                 </div>
               </div>
               <div style={S.heroEmblem}>
@@ -595,6 +660,9 @@ const S = {
   creditPrompt: { position: "absolute", top: 0, left: 0, right: 0, padding: "20px 18px", border: `1px dashed ${C.border}`, borderRadius: 14, fontSize: 13, color: C.textDim, fontWeight: 600, lineHeight: 1.5 },
   creditCard: { position: "absolute", top: 0, left: 0, right: 0, background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 20px", boxShadow: "0 12px 30px rgba(13,27,62,.12)" },
   ccHead: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 },
+  ccYearRow: { display: "flex", gap: 6, marginBottom: 14 },
+  ccYearTab: { flex: "1 1 0", minWidth: 0, padding: "7px 0", borderRadius: 8, border: `1.5px solid ${C.border}`, background: C.white, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 700, letterSpacing: 0.3, color: C.textMuted },
+  ccHint: { margin: 0, padding: "16px 0 20px", fontSize: 12.5, fontWeight: 600, color: C.textDim, lineHeight: 1.5 },
   ccDot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
   ccBranch: { fontSize: 14, fontWeight: 800, color: C.navyDeep },
   ccTag: { marginLeft: "auto", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: C.textDim },

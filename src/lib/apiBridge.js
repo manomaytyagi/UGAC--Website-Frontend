@@ -247,23 +247,14 @@ function normalizeFacultyType(raw) {
   return s;
 }
 
-function inferTypeFromDesignation(designation) {
-  const s = (designation || "").toLowerCase().replace(/[\s._-]+/g, "");
-  if (s.includes("facultyadvis") ) return "adviser";
-  if (s.includes("adviser") || s.includes("advisor")) return "adviser";
-  if (s.includes("director")) return "director";
-  if (s.includes("dean")) return "dean";
-  if (s.includes("chair")) return "school_chair";
-  return null;
-}
-
 function normalizeFaculty(m) {
   const designation = _pick(m, "designation", "role", "position") || "";
   let type = normalizeFacultyType(_pick(m, "type", "category", "contact_type"));
 
-  // If `type` is absent (e.g. admin stores "Faculty Advisor" in designation
-  // but never sets a separate type column), infer it from designation.
-  if (!type) type = inferTypeFromDesignation(designation) || "";
+  // If `type` is absent, infer from the designation as a fallback.
+  if (!type && /chair/i.test(designation)) type = "school_chair";
+  if (!type && /dean/i.test(designation)) type = "dean";
+  if (!type && /director/i.test(designation)) type = "director";
 
   return {
     id: m.id ?? _pick(m, "email", "name"),
@@ -273,8 +264,7 @@ function normalizeFaculty(m) {
     link: _pick(m, "linkedin_url", "linkedin", "link", "profile_url"),
     photo: _pick(m, "photo_url", "photo", "image_url"),
     designation,
-    // `department_id` is the UUID key the API returns; also accept human-readable variants.
-    department: _pick(m, "department", "department_name", "dept", "department_id") || "",
+    department: _pick(m, "department", "department_name", "dept") || "",
     office: _pick(m, "office_location", "office"),
     branch: _pick(m, "branch", "branch_code"),
     batch: _pick(m, "batch", "batch_year", "year"),
@@ -573,7 +563,7 @@ export const api = {
     });
   },
 
-  async curriculum(deptId, fallbackData, { specialisation } = {}) {
+  async curriculum(deptId, fallbackData, { specialisation, batchYear } = {}) {
     return withFallback(async () => {
       const [curricula, branches] = await Promise.all([
         request("/curriculum/"),
@@ -583,17 +573,33 @@ export const api = {
       if (!curricula || curricula.length === 0)
         throw new Error("No curriculum found");
 
-      let match = null;
+      // 1. Narrow to the requested branch (fall back to all if we can't match).
       const deptKey = String(deptId || "").toLowerCase();
       const candidateBranch = (branches || []).find(
         (b) =>
           b.code?.toLowerCase().includes(deptKey) ||
           b.name?.toLowerCase().includes(deptKey),
       );
+
+      let branchCurricula = curricula;
       if (candidateBranch) {
-        match = curricula.find((c) => c.branch_id === candidateBranch.id);
+        const forBranch = curricula.filter(
+          (c) => c.branch_id === candidateBranch.id,
+        );
+        if (forBranch.length) branchCurricula = forBranch;
       }
-      if (!match) match = curricula[0];
+
+      // 2. Pick the record for the requested batch year; else the latest year.
+      const byYearDesc = [...branchCurricula].sort(
+        (a, b) => Number(b.batch_year) - Number(a.batch_year),
+      );
+      let match = null;
+      if (batchYear != null && batchYear !== "") {
+        match = branchCurricula.find(
+          (c) => String(c.batch_year) === String(batchYear),
+        );
+      }
+      if (!match) match = byYearDesc[0] || branchCurricula[0];
 
       const ccs = await request(`/curriculum/${match.id}/courses`);
 
@@ -630,26 +636,38 @@ export const api = {
           }),
         }));
 
+      // 3. Credit breakdown. The header total is the SUM of the category rows,
+      //    so it can never disagree with the numbers shown beneath it. We only
+      //    fall back to the stored total_credits if no category data exists.
+      const num = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+      };
+      const creditRows = [
+        { label: "Institute Compulsory", credits: num(match.ic_compulsory_credits ?? match.ic_credits) },
+        { label: "ICB",                  credits: num(match.icb_credits) },
+        { label: "Discipline Core",      credits: num(match.dc_credits) },
+        { label: "Discipline Elective",  credits: num(match.de_credits) },
+        { label: "Free Elective",        credits: num(match.fe_credits) },
+        { label: "HSS / IKS",            credits: num(match.hss_iks_credits) },
+        { label: "MTP",                  credits: num(match.mtp_credits) },
+        { label: "ISTP",                 credits: num(match.istp_credits) },
+        { label: "Research",             credits: num(match.research_credits) },
+      ];
+      const summedTotal = creditRows.reduce((s, r) => s + r.credits, 0);
       const credits = match ? {
-        total: match.total_credits || 0,
-        rows: [
-          { label: "Institute Core",       credits: match.ic_credits || 0 },
-          { label: "HSS / IKS",            credits: match.hss_iks_credits || 0 },
-          { label: "Discipline Core",      credits: match.dc_credits || 0 },
-          { label: "Discipline Elective",  credits: match.de_credits || 0 },
-          { label: "Free Elective",        credits: match.fe_credits || 0 },
-          { label: "MTP",                  credits: match.mtp_credits || 0 },
-          { label: "ISTP",                 credits: match.istp_credits || 0 },
-        ].filter((r) => r.credits > 0),
+        total: summedTotal || num(match.total_credits),
+        rows: creditRows.filter((r) => r.credits > 0),
       } : null;
 
-      const allBranchCurricula = (curricula || []).filter(
-        (c) => match && c.branch_id === match.branch_id
-      );
-      const batches = allBranchCurricula
-        .map((c) => String(c.batch_year))
-        .filter(Boolean)
-        .sort((a, b) => b - a); 
+      // 4. Every batch year available for this branch (latest first, de-duped).
+      const batches = [
+        ...new Set(
+          branchCurricula
+            .map((c) => (c.batch_year == null ? "" : String(c.batch_year)))
+            .filter(Boolean),
+        ),
+      ].sort((a, b) => Number(b) - Number(a));
 
       return { dept: deptId, name: match.name, semesters, credits, batches };
     }, fallbackData);
@@ -657,10 +675,10 @@ export const api = {
 
   async electiveBaskets(fallbackData) {
     return withFallback(async () => {
-      const curricula = await request("/curricula/");
+      const curricula = await request("/curriculum/");
       const match = (curricula || [])[0];
       if (!match) throw new Error("No curriculum found");
-      const baskets = await request(`/curricula/${match.id}/elective-baskets`);
+      const baskets = await request(`/curriculum/${match.id}/elective-baskets`);
       return (baskets || []).map((b) => ({
         name: b.name,
         description: `${b.min_credits}–${b.max_credits} credits · Semester ${b.semester}`,
