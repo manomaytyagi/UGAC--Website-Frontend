@@ -1,689 +1,1535 @@
-export const API_BASE = import.meta.env.VITE_API_BASE || "/api-proxy";
-export const FORMSPREE_ID = import.meta.env.VITE_FORMSPREE_ID || "";
-const REQUEST_TIMEOUT_MS = 12000;
+/* ===========================================================================
+   UGAC WEBSITE — API BRIDGE
+   ---------------------------------------------------------------------------
+   One module sits between the React pages and the FastAPI backend documented
+   in integration.md. The pages never speak HTTP; they ask this file for the
+   exact shape they render, and this file does the fetching, paging, caching,
+   joining and reshaping.
 
-async function request(path, { method = "GET", body, signal } = {}) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+   Every read returns the same envelope:
 
-  if (signal) {
-    signal.addEventListener("abort", () => controller.abort());
+       { data, source }        source: "live" | "fallback"
+
+   so a page can always render something. If the network dies, the backend is
+   cold, or a field is missing, the caller's fallback data is returned and the
+   page shows its "sample data" banner instead of an error.
+
+   PUBLIC SURFACE (this is the contract the pages rely on)
+   ---------------------------------------------------------------------------
+     apiFetch(path, fallback)        virtual endpoints  -> { data, source }
+     api.departments(fb)             CoursesPage
+     api.coursesLite(fb)             CoursesPage
+     api.courseDetail(id, fb)        CourseDetailPage
+     api.submitReview(payload)       CourseDetailPage  (throws on failure)
+     api.curriculum(code, fb, opts)  CurriculumPage
+     api.electiveBaskets(fb, opts)
+     api.search(q, fb)
+     resourcesApi.category(tab, fb)  ResourcesPage, Homepage
+     resourcesApi.presignedUrl(key)  ResourcesPage
+     branchMeta(code)                FacultyAdvisers
+     batchLabel(value)
+     submitFeedback(payload)         Community > Feedback (opt-in, see below)
+
+   CONFIGURATION (Vite env vars, all optional)
+   ---------------------------------------------------------------------------
+     VITE_API_BASE          backend origin. Defaults to the deployed backend.
+                            Set it to "/api-proxy" only if you actually add a
+                            proxy rewrite — the repo currently has none.
+     VITE_HCAPTCHA_TOKEN    dev-only hCaptcha token for review submission.
+     VITE_FORMSPREE_ID      enables the feedback form.
+     VITE_FEEDBACK_ENDPOINT overrides Formspree with your own POST endpoint.
+   =========================================================================== */
+
+const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
+
+export const API_BASE = String(
+  ENV.VITE_API_BASE ||
+    "https://ug-0ceb454fbac544039d40462fe569d71b.ecs.ap-south-1.on.aws"
+).replace(/\/+$/, "");
+
+export const FORMSPREE_ID = ENV.VITE_FORMSPREE_ID || "";
+export const FEEDBACK_ENDPOINT =
+  ENV.VITE_FEEDBACK_ENDPOINT ||
+  (FORMSPREE_ID ? `https://formspree.io/f/${FORMSPREE_ID}` : "");
+
+/* The backend scales to zero, so the first request of a session can take far
+   longer than a warm one while the container starts. The pages show a "waking
+   up" toast after 4s; these budgets let that actually pay off instead of
+   aborting the request out from under it. */
+const TIMEOUT_MS = 15000;      // normal request
+const COLD_TIMEOUT_MS = 45000; // retry, assuming a cold start
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+/* ===========================================================================
+   1. HTTP layer
+   =========================================================================== */
+
+export class ApiError extends Error {
+  constructor(message, { status = 0, path = "", detail = null } = {}) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.path = path;
+    this.detail = detail;
   }
+}
+
+/** Build a query string, dropping empty values. */
+function qs(params) {
+  const usp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value === undefined || value === null || value === "") continue;
+    usp.append(key, String(value));
+  }
+  const s = usp.toString();
+  return s ? `?${s}` : "";
+}
+
+/** Pull a human-readable message out of FastAPI's error bodies. */
+function describeDetail(detail) {
+  if (!detail) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => {
+        const field = Array.isArray(d?.loc) ? d.loc[d.loc.length - 1] : null;
+        return field ? `${field}: ${d.msg}` : d?.msg;
+      })
+      .filter(Boolean)
+      .join("; ");
+  }
+  return JSON.stringify(detail);
+}
+
+async function once(path, { method, body, timeout, signal, headers }) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", abort);
+  }
+  const timer = setTimeout(abort, timeout);
 
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
+      headers: {
+        Accept: "application/json",
+        ...(body !== undefined ? { "Content-Type": "application/json" } : null),
+        ...headers,
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
 
     if (!res.ok) {
-      let detail = "";
+      let detail = null;
       try {
-        const errBody = await res.json();
-        detail = errBody?.detail ? JSON.stringify(errBody.detail) : "";
-      } catch {}
-      throw new Error(
-        `Request failed: ${res.status} ${res.statusText} ${detail}`,
+        detail = (await res.json())?.detail ?? null;
+      } catch {
+        /* error body was not JSON — status alone will have to do */
+      }
+      const suffix = describeDetail(detail);
+      throw new ApiError(
+        `${method} ${path} failed: ${res.status}${suffix ? ` — ${suffix}` : ""}`,
+        { status: res.status, path, detail }
       );
     }
 
     if (res.status === 204) return null;
-    return await res.json();
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    if (err?.name === "AbortError") {
+      throw new ApiError(`${method} ${path} timed out`, { status: 0, path });
+    }
+    throw new ApiError(`${method} ${path} failed: ${err?.message || err}`, {
+      status: 0,
+      path,
+    });
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener("abort", abort);
   }
 }
 
-async function withFallback(fn, fallbackData) {
+const RETRYABLE_STATUS = new Set([0, 408, 429, 500, 502, 503, 504]);
+
+/**
+ * One backend request. GETs get a single retry on a cold start / transient
+ * failure with a much longer budget. Writes are never retried — a duplicated
+ * POST would mean a duplicated review.
+ */
+export async function request(path, options = {}) {
+  const { method = "GET", body, signal, headers } = options;
   try {
-    const data = await fn();
-    return { data, source: "live" };
+    return await once(path, { method, body, timeout: TIMEOUT_MS, signal, headers });
   } catch (err) {
-    console.warn(
-      "[apiBridge] live request failed, using fallback:",
-      err.message,
+    const retryable =
+      method === "GET" && err instanceof ApiError && RETRYABLE_STATUS.has(err.status);
+    if (!retryable || signal?.aborted) throw err;
+    return once(path, { method, body, timeout: COLD_TIMEOUT_MS, signal, headers });
+  }
+}
+
+/* ===========================================================================
+   2. Cache — TTL + in-flight de-duplication
+
+   Several pages need the same collections at the same moment (CoursesPage asks
+   for departments and courses in parallel; the curriculum view needs courses
+   again; the community tabs both read /faculty/). Without this, one page load
+   fires the same cold-start request three times.
+   =========================================================================== */
+
+const cache = new Map(); // path -> { expires, value }
+const inflight = new Map(); // path -> Promise
+
+async function getCached(path, ttl = CACHE_TTL_MS) {
+  const hit = cache.get(path);
+  if (hit && hit.expires > Date.now()) return hit.value;
+  if (inflight.has(path)) return inflight.get(path);
+
+  const promise = request(path)
+    .then((value) => {
+      cache.set(path, { expires: Date.now() + ttl, value });
+      return value;
+    })
+    .finally(() => inflight.delete(path));
+
+  inflight.set(path, promise);
+  return promise;
+}
+
+/** Drop cached responses. Pass a prefix to clear one collection. */
+export function clearApiCache(prefix) {
+  if (!prefix) {
+    cache.clear();
+    return;
+  }
+  for (const key of [...cache.keys()]) {
+    if (key.startsWith(prefix)) cache.delete(key);
+  }
+}
+
+/**
+ * Walk a paginated list endpoint until it runs out. skip=0&limit=100 with no
+ * filters is exactly the shape the backend serves from Redis, so the first
+ * page of every collection stays cheap.
+ */
+async function getPaged(path, { params = {}, limit = 100, maxPages = 25 } = {}) {
+  const out = [];
+  for (let page = 0; page < maxPages; page++) {
+    const chunk = await getCached(
+      `${path}${qs({ ...params, skip: page * limit, limit })}`
     );
+    if (!Array.isArray(chunk) || chunk.length === 0) break;
+    out.push(...chunk);
+    if (chunk.length < limit) break;
+  }
+  return out;
+}
+
+/** Wrap a live read so a failure degrades to the caller's fallback data. */
+async function withFallback(load, fallbackData) {
+  try {
+    return { data: await load(), source: "live" };
+  } catch (err) {
+    if (ENV.DEV) console.warn("[apiBridge] falling back:", err?.message || err);
     return { data: fallbackData, source: "fallback" };
   }
 }
 
-function formatTime(isoString) {
-  if (!isoString) return null;
-  try {
-    const d = new Date(isoString);
-    // Midnight UTC typically means no time was set — omit it
-    if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) return null;
-    return d.toLocaleTimeString("en-IN", {
-      hour: "numeric", minute: "2-digit", hour12: true,
-    });
-  } catch {
-    return null;
+/* ===========================================================================
+   3. Small shared helpers
+   =========================================================================== */
+
+/** The admin panel occasionally leaks a stringified Python object. Drop those. */
+function clean(value) {
+  if (typeof value !== "string") return value ?? null;
+  const s = value.trim();
+  if (!s || /^<.*object at 0x[0-9a-f]+>$/i.test(s)) return null;
+  return s;
+}
+
+/** First non-empty value among the given keys. */
+function pick(obj, ...keys) {
+  for (const key of keys) {
+    const v = clean(obj?.[key]);
+    if (v !== null && v !== undefined && v !== "") return v;
+  }
+  return null;
+}
+
+const slugKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const isHttp = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
+const storageUrl = (key) =>
+  key ? `${API_BASE}/storage/file/${String(key).replace(/^\/+/, "")}` : null;
+
+function initials(name, max = 2) {
+  const letters = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+  return letters.slice(0, max);
+}
+
+function toNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function titleCase(s) {
+  const t = String(s || "").trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : "";
+}
+
+/* ===========================================================================
+   4. Departments
+
+   CoursesPage renders a fixed picker of twelve departments keyed by slug
+   ("cse", "math", …) and CourseDetailPage colours its header from the display
+   name. The backend keys departments by UUID and names them however the admin
+   typed them, so every live row is resolved onto this canonical table — by
+   code first, then by a keyword in the name. Matching here is what lets live
+   names, colours and course counts reach the page instead of the static
+   sample list.
+   =========================================================================== */
+
+const DEPARTMENTS = [
+  { id: "cse",  name: "Computer Science",       short: "CS", color: "#4f7cc4",
+    codes: ["CSE", "CS", "SCEE"],        keywords: ["computer"] },
+  { id: "ece",  name: "Electronics & Comm.",    short: "EC", color: "#d18a3e",
+    codes: ["ECE", "EC"],                keywords: ["electronic", "communication"] },
+  { id: "ee",   name: "Electrical Engineering", short: "EE", color: "#e0aa6b",
+    codes: ["EE", "EEE"],                keywords: ["electrical"] },
+  { id: "me",   name: "Mechanical Engineering", short: "ME", color: "#4e9b72",
+    codes: ["ME", "MECH", "SMME"],       keywords: ["mechanical"] },
+  { id: "ce",   name: "Civil Engineering",      short: "CE", color: "#c25b52",
+    codes: ["CE", "CIV", "SCENE"],       keywords: ["civil", "environmental"] },
+  { id: "dse",  name: "Data Science & Eng.",    short: "DS", color: "#2f8f86",
+    codes: ["DSE", "DS", "DSAI"],        keywords: ["data science", "artificial intelligence"] },
+  { id: "math", name: "Mathematics",            short: "MA", color: "#37548f",
+    codes: ["MA", "MTH", "MATH", "MNC", "MC", "SMSS"],
+    keywords: ["mathemat", "statistic", "computing"] },
+  { id: "phy",  name: "Physics",                short: "PH", color: "#6f7bd0",
+    codes: ["PH", "PHY", "EP", "SPS"],   keywords: ["physic"] },
+  { id: "chem", name: "Chemistry",              short: "CH", color: "#9c4a52",
+    codes: ["CH", "CY", "CHM", "CHEM", "SCS"],
+    keywords: ["chemistry", "chemical science"] },
+  { id: "bt",   name: "Biotechnology",          short: "BT", color: "#2f6e54",
+    codes: ["BT", "BIO", "BE", "SBB"],   keywords: ["bio"] },
+  { id: "mse",  name: "Materials Engineering",  short: "MT", color: "#a8682c",
+    codes: ["MSE", "MS", "MT"],          keywords: ["material"] },
+  { id: "hss",  name: "Humanities & Soc. Sci.", short: "HS", color: "#7a6cae",
+    codes: ["HSS", "HS", "SHSS"],        keywords: ["humanit", "social", "liberal"] },
+];
+
+const DEPT_PALETTE = DEPARTMENTS.map((d) => d.color);
+
+const DEPT_BY_CODE = new Map();
+for (const dept of DEPARTMENTS) {
+  for (const code of dept.codes) {
+    if (!DEPT_BY_CODE.has(code)) DEPT_BY_CODE.set(code, dept);
   }
 }
 
-function reshapeEvent(e) {
-  return {
-    id:          e.id,
-    title:       e.title        || "",
-    desc:        e.description  || "",
-    date:        e.event_date   ? e.event_date.slice(0, 10) : null,
-    time:        formatTime(e.event_date),
-    venue:       e.location     || null,
-    banner_key:  e.banner_key   || "",
-    form_url:    e.registration_url || null,
-    tag:         null,
-    audience:    null,
-    report_key:  null,
-    youtube_url: null,
-    canva_url:   null,
-    documents:   [],
-  };
+/** Resolve an API department code or name onto the canonical table. */
+function resolveDepartment(raw) {
+  const value = clean(raw);
+  if (!value) return null;
+
+  const code = String(value).toUpperCase().replace(/[^A-Z]/g, "");
+  if (DEPT_BY_CODE.has(code)) return DEPT_BY_CODE.get(code);
+
+  const lower = String(value).toLowerCase();
+  for (const dept of DEPARTMENTS) {
+    if (dept.keywords.some((k) => lower.includes(k))) return dept;
+  }
+  return null;
 }
 
-function reshapeEvents(raw) {
-  const list = Array.isArray(raw) ? raw : [];
-  const now  = new Date();
-  const upcoming = [];
-  const past     = [];
+/** "CS301" -> "cse". Used when a course row has no department_id. */
+function departmentFromCourseCode(code) {
+  const prefix = /^([A-Za-z]{2,4})/.exec(String(code || "").trim())?.[1];
+  if (!prefix) return null;
+  const upper = prefix.toUpperCase();
+  return (DEPT_BY_CODE.get(upper) || DEPT_BY_CODE.get(upper.slice(0, 2)))?.id ?? null;
+}
 
-  list.forEach((e) => {
-    const shaped = reshapeEvent(e);
-    if (!shaped.date) return;
-    if (new Date(shaped.date) >= now) {
-      upcoming.push(shaped);
-    } else {
-      past.push(shaped);
+/**
+ * Fetch /departments/ once and index it both ways: a display list for the
+ * picker, and UUID -> entry so course rows can be joined onto it.
+ */
+async function loadDepartmentIndex() {
+  const rows = await getPaged("/departments/");
+  const list = [];
+  const byApiId = new Map();
+  const seen = new Set();
+
+  rows.forEach((row, i) => {
+    const canon = resolveDepartment(row.code) || resolveDepartment(row.name);
+    const entry = canon
+      ? { id: canon.id, name: canon.name, short: canon.short, color: canon.color }
+      : {
+          id: slugKey(row.code || row.name) || `dept-${i}`,
+          name: clean(row.name) || clean(row.code) || "Department",
+          short: (clean(row.code) || initials(row.name)).slice(0, 2).toUpperCase(),
+          color: DEPT_PALETTE[i % DEPT_PALETTE.length],
+        };
+
+    entry.apiId = row.id;
+    entry.apiCode = clean(row.code);
+    entry.apiName = clean(row.name);
+
+    byApiId.set(row.id, entry);
+    if (!seen.has(entry.id)) {
+      seen.add(entry.id);
+      list.push(entry);
     }
   });
 
+  return { list, byApiId };
+}
+
+/* ===========================================================================
+   5. Branches
+
+   Curriculum, Team and Faculty Advisers all key off branch codes. The backend
+   stores branch codes with a degree suffix ("CSE-BT") and the pages use bare
+   codes, plus a few historic spellings (BE/BIO, MC/MNC, QST/QSE), so every
+   branch string goes through resolveBranchCode() before it is used as a key.
+   =========================================================================== */
+
+const BRANCH_META = {
+  BIO:  { name: "Bio Engineering",                              color: "#6fa3d0" },
+  CSE:  { name: "Computer Science and Engineering",             color: "#4f7cc4" },
+  EE:   { name: "Electrical Engineering",                       color: "#37548f" },
+  CE:   { name: "Civil Engineering",                            color: "#d98c80" },
+  ME:   { name: "Mechanical Engineering",                       color: "#c25b52" },
+  MNC:  { name: "Mathematics and Computing",                    color: "#9c4a52" },
+  VLSI: { name: "Microelectronics and VLSI",                    color: "#84b88c" },
+  EP:   { name: "Engineering Physics",                          color: "#4e9b72" },
+  DSAI: { name: "Data Science and Artificial Intelligence",     color: "#2f6e54" },
+  MSE:  { name: "Materials Science and Engineering",            color: "#e0aa6b" },
+  GE:   { name: "General Engineering",                          color: "#d18a3e" },
+  BS:   { name: "BS in Chemical Sciences",                      color: "#a8682c" },
+  DSE:  { name: "Data Science and Engineering",                 color: "#2a3f6e" },
+  QSE:  { name: "Quantum Science and Engineering",              color: "#b03a42" },
+  AE:   { name: "Agricultural Engineering with Data Analytics", color: "#1d4d38" },
+  CEDA: { name: "Chemical Engineering with Data Analytics",     color: "#7a4a1e" },
+  CHE:  { name: "Chemical Engineering",                         color: "#3f7d8c" },
+};
+
+const BRANCH_BY_NAME = new Map(
+  Object.entries(BRANCH_META).map(([code, meta]) => [slugKey(meta.name), code])
+);
+
+const BRANCH_ALIASES = {
+  be: "BIO", bioengineering: "BIO", biotechnology: "BIO", bioengg: "BIO",
+  mc: "MNC", mathematicsandcomputing: "MNC", maths: "MNC",
+  qst: "QSE", quantumscienceandtechnology: "QSE", quantum: "QSE",
+  microelectronicsandvlsi: "VLSI",
+  che: "CHE", chemicalengineering: "CHE",
+  ge: "GE", generalengineering: "GE",
+  cs: "CSE", computerscience: "CSE",
+  dsai: "DSAI", dsedataScience: "DSE",
+};
+
+/** Strip degree suffixes: "CSE-BT" / "CSE_BTECH" -> "CSE". */
+function stripDegreeSuffix(code) {
+  return String(code || "")
+    .toUpperCase()
+    .replace(/[-_\s]*(BT|BTECH|BE|MT|MTECH|MS|PHD|UG|PG)$/i, "")
+    .trim();
+}
+
+/** Turn anything branch-ish (code, suffixed code, full name) into a key. */
+export function resolveBranchCode(raw) {
+  const value = clean(raw);
+  if (!value) return "";
+
+  const upper = String(value).trim().toUpperCase();
+  if (BRANCH_META[upper]) return upper;
+
+  const stripped = stripDegreeSuffix(upper).replace(/[^A-Z0-9]/g, "");
+  if (BRANCH_META[stripped]) return stripped;
+
+  const key = slugKey(value);
+  if (BRANCH_BY_NAME.has(key)) return BRANCH_BY_NAME.get(key);
+  if (BRANCH_ALIASES[key]) return BRANCH_ALIASES[key];
+  if (BRANCH_ALIASES[slugKey(stripped)]) return BRANCH_ALIASES[slugKey(stripped)];
+
+  return stripped || upper;
+}
+
+/** Display name + colour for a branch code. Never throws, never returns null. */
+export function branchMeta(code) {
+  const resolved = resolveBranchCode(code);
+  if (BRANCH_META[resolved]) return { code: resolved, ...BRANCH_META[resolved] };
+  return {
+    code: resolved || "GEN",
+    name: clean(code) || "General",
+    color: "#4f7cc4",
+  };
+}
+
+/** Fetch /branches/ once, indexed by UUID and by resolved code. */
+async function loadBranchIndex() {
+  const rows = await getPaged("/branches/");
+  const byApiId = new Map();
+  const byCode = new Map();
+
+  for (const row of rows) {
+    const code = resolveBranchCode(row.code) || resolveBranchCode(row.name);
+    const entry = {
+      apiId: row.id,
+      apiCode: clean(row.code),
+      code,
+      name: BRANCH_META[code]?.name || clean(row.name) || code,
+      color: branchMeta(code).color,
+      departmentId: row.department_id ?? null,
+    };
+    byApiId.set(row.id, entry);
+    if (code && !byCode.has(code)) byCode.set(code, entry);
+  }
+
+  return { rows, byApiId, byCode };
+}
+
+/* ===========================================================================
+   6. Courses
+   =========================================================================== */
+
+/**
+ * The full course list. /courses/ carries department_id (which /courses/lite
+ * does not) and that join is what puts courses under the right department on
+ * the catalogue page, so it is preferred; /courses/lite is the safety net.
+ */
+async function loadCourses() {
+  try {
+    const rows = await getPaged("/courses/");
+    if (rows.length) return rows;
+  } catch {
+    /* fall through to the lite endpoint */
+  }
+  const lite = await getCached("/courses/lite");
+  return Array.isArray(lite) ? lite : [];
+}
+
+/** UUID -> raw course row, for prerequisite and curriculum joins. */
+async function loadCourseIndex() {
+  const rows = await loadCourses();
+  return new Map(rows.map((c) => [c.id, c]));
+}
+
+function shapeCourseSummary(row, deptIndex) {
+  const dept =
+    deptIndex?.byApiId.get(row.department_id)?.id ??
+    departmentFromCourseCode(row.code) ??
+    null;
+
+  return {
+    id: row.id,
+    code: clean(row.code) || "",
+    title: clean(row.name) || "Untitled course",
+    dept,
+    credits: toNumber(row.credits),
+  };
+}
+
+/* ===========================================================================
+   7. Events
+   =========================================================================== */
+
+/** Events return ISO datetimes; midnight UTC means "no time was set". */
+function eventTime(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) return null;
+  return d.toLocaleTimeString("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+const isoDate = (value) =>
+  value ? String(value).slice(0, 10) : null;
+
+/** The attachment list is free-form JSON; accept the shapes admins produce. */
+function shapeDocuments(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((doc) => {
+      if (typeof doc === "string") {
+        return isHttp(doc)
+          ? { label: "Document", url: doc }
+          : { label: "Document", url: storageUrl(doc) };
+      }
+      const url =
+        pick(doc, "url", "link", "file_url", "href") ||
+        storageUrl(pick(doc, "key", "file_key", "storage_key"));
+      if (!url) return null;
+      return {
+        label: pick(doc, "label", "name", "title", "filename") || "Document",
+        url,
+      };
+    })
+    .filter(Boolean);
+}
+
+function shapeEvent(row) {
+  /* GET responses alias the columns: event_date -> date, banner_key ->
+     image_key. Both spellings are read so a schema change can't blank the
+     page. */
+  const start = pick(row, "date", "event_date");
+  const end = pick(row, "end_date");
+  const tags = Array.isArray(row.tags) ? row.tags.filter(Boolean) : [];
+
+  return {
+    id: row.id,
+    title: clean(row.title) || "Untitled event",
+    desc: clean(row.description) || "",
+    date: isoDate(start),
+    endDate: isoDate(end),
+    time: eventTime(start),
+    venue: pick(row, "location", "venue"),
+    audience: pick(row, "audience"),
+    banner_key: pick(row, "image_key", "banner_key", "banner_url") || "",
+    form_url: pick(row, "registration_url", "form_url"),
+    report_key: pick(row, "report_key"),
+    youtube_url: pick(row, "youtube_url"),
+    canva_url: pick(row, "canva_url"),
+    documents: shapeDocuments(row.documents),
+    tags,
+    tag: tags.length ? titleCase(tags[0]) : "Event",
+    isFeatured: Boolean(row.is_featured),
+  };
+}
+
+/**
+ * Split into the two lists the Events page renders. A multi-day event stays
+ * "upcoming" until its end date passes, and the comparison is against the
+ * start of today so an event happening this afternoon is not already past.
+ */
+function shapeEvents(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const upcoming = [];
+  const past = [];
+
+  for (const row of list) {
+    if (row?.is_active === false) continue;
+    const event = shapeEvent(row);
+    if (!event.date) continue;
+    const closes = new Date(event.endDate || event.date);
+    (closes >= today ? upcoming : past).push(event);
+  }
+
   upcoming.sort((a, b) => new Date(a.date) - new Date(b.date)); // soonest first
-  past.sort((a, b)     => new Date(b.date) - new Date(a.date)); // most recent first
+  past.sort((a, b) => new Date(b.date) - new Date(a.date));     // newest first
 
   return { upcoming, past };
 }
 
-function reshapeAnnouncement(a) {
+/* ===========================================================================
+   8. Announcements — camelCase, pinned first, then newest first.
+   =========================================================================== */
+
+function shapeAnnouncement(row) {
   return {
-    id: a.id,
-    title: a.title || "",
-    content: a.content || "",
-    category: a.category || "Announcement",
-    attachmentUrl: a.attachment_url || null,
-    publishedAt: a.published_at || null,
-    isPinned: Boolean(a.is_pinned),
-    isActive: a.is_active !== false,
+    id: row.id,
+    title: clean(row.title) || "",
+    content: clean(row.content) || "",
+    category: clean(row.category) || "Notice",
+    attachmentUrl: pick(row, "attachment_url"),
+    publishedAt: pick(row, "published_at", "created_at"),
+    isPinned: Boolean(row.is_pinned),
+    isActive: row.is_active !== false,
   };
 }
 
-function reshapeAnnouncements(raw) {
-  const list = Array.isArray(raw) ? raw : [];
-  return list
-    .map(reshapeAnnouncement)
-    .filter((a) => a.isActive)
+function shapeAnnouncements(rows) {
+  const time = (a) => (a.publishedAt ? new Date(a.publishedAt).getTime() : 0);
+  return (Array.isArray(rows) ? rows : [])
+    .map(shapeAnnouncement)
+    .filter((a) => a.isActive && a.title)
     .sort((a, b) => {
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-      const aTime = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
-      const bTime = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
-      return bTime - aTime;
+      return time(b) - time(a);
     });
 }
 
-export async function apiFetch(path, fallbackData) {
-  if (path === "/api/v1/team") {
-    return withFallback(async () => {
-      const members = await request("/team/");
-      return reshapeTeam(members);
-    }, fallbackData);
-  }
+/* ===========================================================================
+   9. Faculty -> Community pages
 
-  if (path === "/api/v1/events") {
-    return withFallback(async () => {
-      const events = await request("/events/");
-      return reshapeEvents(events);
-    }, fallbackData);
-  }
+   /faculty/ is one flat collection feeding two pages. There is no "type"
+   column: the role lives in `designation` ("Faculty Advisor", "Dean of
+   Students", "Chairperson, SCEE"), so it is classified here. `branch_id` and
+   `department_id` are UUIDs, so both lookup tables are joined in before
+   grouping — without that join every adviser lands in one nameless bucket.
+   =========================================================================== */
 
-  if (path === "/api/v1/announcements") {
-    return withFallback(async () => {
-      const announcements = await request("/announcements/");
-      return reshapeAnnouncements(announcements);
-    }, fallbackData);
-  }
-
-  if (path === "/api/v1/faculty-advisers") {
-    return withFallback(async () => {
-      const faculty = await request("/faculty/");
-      const shaped = reshapeAdvisers(faculty);
-      if (!shaped.length) throw new Error("No faculty advisers returned");
-      return shaped;
-    }, fallbackData);
-  }
-
-  if (path === "/api/v1/important-contacts") {
-    return withFallback(async () => {
-      const faculty = await request("/faculty/");
-      const shaped = reshapeContacts(faculty);
-      if (!shaped.length) throw new Error("No contacts returned");
-      return shaped;
-    }, fallbackData);
-  }
-
-  if (path.startsWith("/api/v1/events/banner")) {
-    return { data: fallbackData, source: "fallback" };
-  }
-
-  if (path.startsWith("/api/v1/team/photo")) {
-    return { data: fallbackData, source: "fallback" };
-  }
-
-  console.warn(`[apiBridge] apiFetch called with unmapped path: ${path}`);
-  return { data: fallbackData, source: "fallback" };
-}
-
-const BRANCH_META = {
-  BIO:  { name: "Bio Engineering",                                color: "#6fa3d0" },
-  CSE:  { name: "Computer Science and Engineering",               color: "#4f7cc4" },
-  EE:   { name: "Electrical Engineering",                         color: "#37548f" },
-  CE:   { name: "Civil Engineering",                              color: "#d98c80" },
-  ME:   { name: "Mechanical Engineering",                         color: "#c25b52" },
-  MNC:  { name: "Mathematics and Computing",                      color: "#9c4a52" },
-  VLSI: { name: "Microelectronics and VLSI",                      color: "#84b88c" },
-  EP:   { name: "Engineering Physics",                            color: "#4e9b72" },
-  DSAI: { name: "Data Science and Artificial Intelligence",       color: "#2f6e54" },
-  MSE:  { name: "Materials Science and Engineering",              color: "#e0aa6b" },
-  GE:   { name: "General Engineering",                            color: "#d18a3e" },
-  BS:   { name: "BS in Chemical Sciences",                        color: "#a8682c" },
-  DSE:  { name: "Data Science and Engineering",                   color: "#2a3f6e" },  
-  QSE:  { name: "Quantum Science and Engineering",                color: "#b03a42" },  
-  AE:   { name: "Agricultural Engineering with Data Analytics",   color: "#1d4d38" },  
-  CEDA: { name: "Chemical Engineering with Data Analytics",       color: "#7a4a1e" },  
-};
-
-/* ---------------------------------------------------------------------------
-   Faculty  ->  Community pages (Faculty Advisers + Important Contacts)
-
-   Both pages read from one `/faculty/` collection. Each row looks roughly like
-   the admin "Faculty" form:
-
-     { id, name, email, designation, department, photo_url, office_location,
-       linkedin_url, is_active, branch, batch, type }
-
-   `type` decides where a row appears:
-     adviser        -> Faculty Advisers page (grouped by branch, split by batch)
-     director       -> Important Contacts, group 1
-     dean           -> Important Contacts, group 2
-     student_body   -> Important Contacts, group 3
-     school_chair   -> Important Contacts, group 4
-     school_office  -> Important Contacts, group 5
-
-   Reshapers are lenient about field names / spellings so the UI keeps working
-   even if the backend labels differ slightly.
---------------------------------------------------------------------------- */
-
-export function branchMeta(code) {
-  const key = (code || "").toString().trim().toUpperCase();
-  return BRANCH_META[key] || { name: key || "General", color: "#4f7cc4" };
-}
-
-const _pick = (obj, ...keys) => {
-  for (const k of keys) {
-    const v = obj?.[k];
-    if (v !== undefined && v !== null && v !== "") return v;
-  }
-  return null;
-};
-
-function normalizeFacultyType(raw) {
-  const s = (raw || "").toString().toLowerCase().replace(/[\s._-]+/g, "");
+/** Order matters: "Dean of Students" is a dean, not a student rep. */
+function classifyFaculty(text) {
+  const s = String(text || "").toLowerCase().replace(/[\s._-]+/g, "");
   if (!s) return "";
   if (s.includes("adviser") || s.includes("advisor")) return "adviser";
   if (s.includes("director")) return "director";
   if (s.includes("dean")) return "dean";
-  if (s.includes("student")) return "student_body";
   if (s.includes("chair")) return "school_chair";
-  if (s.includes("office")) return "school_office";
-  return s;
+  if (s.includes("office") || s.includes("registrar")) return "school_office";
+  if (s.includes("secretary") || s.includes("council") || s.includes("student"))
+    return "student_body";
+  return "";
 }
 
-function normalizeFaculty(m) {
-  const designation = _pick(m, "designation", "role", "position") || "";
-  let type = normalizeFacultyType(_pick(m, "type", "category", "contact_type"));
+function normalizeFaculty(row, { branchIndex, deptIndex } = {}) {
+  const designation = pick(row, "designation", "role", "position") || "";
+  const explicit = classifyFaculty(pick(row, "type", "category", "contact_type"));
 
-  // If `type` is absent, infer from the designation as a fallback.
-  if (!type && /chair/i.test(designation)) type = "school_chair";
-  if (!type && /dean/i.test(designation)) type = "dean";
-  if (!type && /director/i.test(designation)) type = "director";
+  const branchEntry = branchIndex?.byApiId.get(row.branch_id) || null;
+  const deptEntry = deptIndex?.byApiId.get(row.department_id) || null;
 
   return {
-    id: m.id ?? _pick(m, "email", "name"),
-    name: _pick(m, "name") || "",
-    email: _pick(m, "email"),
-    phone: _pick(m, "phone", "phone_number"),
-    link: _pick(m, "linkedin_url", "linkedin", "link", "profile_url"),
-    photo: _pick(m, "photo_url", "photo", "image_url"),
+    id: row.id ?? pick(row, "email", "name"),
+    name: clean(row.name) || "",
+    email: pick(row, "email"),
+    phone: pick(row, "phone", "phone_number", "contact"),
+    link: pick(row, "linkedin_url", "linkedin", "profile_url", "link"),
+    photo: pick(row, "photo_url", "photo", "image_url"),
     designation,
-    department: _pick(m, "department", "department_name", "dept") || "",
-    office: _pick(m, "office_location", "office"),
-    branch: _pick(m, "branch", "branch_code"),
-    batch: _pick(m, "batch", "batch_year", "year"),
-    type,
-    active: m.is_active ?? m.active ?? true,
+    department: deptEntry?.apiName || deptEntry?.name || pick(row, "department", "dept") || "",
+    office: pick(row, "office_location", "office"),
+    branch: branchEntry?.code || resolveBranchCode(pick(row, "branch", "branch_code")),
+    branchName: branchEntry?.name || null,
+    batch: row.batch_year ?? pick(row, "batch", "year"),
+    type: explicit || classifyFaculty(designation),
+    active: row.is_active !== false,
   };
 }
 
-function batchSortKey(b) {
-  if (b == null) return 9999;
-  const n = parseInt(String(b).replace(/\D/g, ""), 10);
+/** Sort key so 1st year comes before 4th, and unknowns sink to the bottom. */
+function batchSortKey(batch) {
+  if (batch === null || batch === undefined || batch === "") return 9999;
+  const n = parseInt(String(batch).replace(/\D/g, ""), 10);
   return Number.isFinite(n) ? n : 9999;
 }
 
-// "1" / "1st Year" / "2023" -> a readable label for the adviser card.
-export function batchLabel(b) {
-  if (b == null || b === "") return "";
-  const s = String(b).trim();
-  if (/year/i.test(s)) return s;                    // already "2nd Year"
+/** 1 -> "1st Year", 2023 -> "Batch 2023", "2nd Year" -> unchanged. */
+export function batchLabel(batch) {
+  if (batch === null || batch === undefined || batch === "") return "";
+  const s = String(batch).trim();
+  if (/year/i.test(s)) return s;
+
   const digits = s.replace(/\D/g, "");
-  if (digits.length >= 4) return `Batch ${digits}`; // admission year
+  if (digits.length >= 4) return `Batch ${digits}`;
+
   const n = parseInt(digits, 10);
-  const ord = ["1st", "2nd", "3rd", "4th", "5th"];
-  if (n >= 1 && n <= 5) return `${ord[n - 1]} Year`;
-  return s;
+  const ordinals = ["1st", "2nd", "3rd", "4th", "5th"];
+  return n >= 1 && n <= 5 ? `${ordinals[n - 1]} Year` : s;
 }
 
-function reshapeAdvisers(raw) {
-  const advisers = (Array.isArray(raw) ? raw : [])
-    .map(normalizeFaculty)
-    .filter((m) => m.type === "adviser" && m.active !== false);
+function shapeAdvisers(rows, indexes) {
+  const people = (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeFaculty(row, indexes))
+    .filter((m) => m.active);
 
-  const byBranch = {};
-  for (const m of advisers) {
-    const code = (m.branch || "GEN").toString().trim().toUpperCase();
-    if (!byBranch[code]) {
-      const meta = branchMeta(code);
-      byBranch[code] = { id: code, code, name: meta.name, color: meta.color, advisers: [] };
+  /* Prefer an explicit "Faculty Advisor" designation. If nobody is labelled
+     that way, fall back to anyone attached to a branch and a batch — that
+     combination only exists for advisers. */
+  let advisers = people.filter((m) => m.type === "adviser");
+  if (!advisers.length) {
+    advisers = people.filter((m) => m.branch && m.batch !== null && m.batch !== undefined);
+  }
+
+  const byBranch = new Map();
+  for (const person of advisers) {
+    const code = person.branch || "GEN";
+    const known = Object.prototype.hasOwnProperty.call(BRANCH_META, code);
+    const meta = branchMeta(code);
+    const name = known ? meta.name : person.branchName || meta.name;
+
+    if (!byBranch.has(code)) {
+      byBranch.set(code, {
+        id: code,
+        code: known ? code : initials(name, 4) || code,
+        name,
+        color: meta.color,
+        advisers: [],
+      });
     }
-    byBranch[code].advisers.push({
-      name: m.name || null,
-      email: m.email,
-      link: m.link,
-      office: m.office,
-      batch: m.batch,
-      batchLabel: batchLabel(m.batch),
+
+    byBranch.get(code).advisers.push({
+      name: person.name || null,
+      email: person.email,
+      phone: person.phone,
+      link: person.link,
+      office: person.office,
+      batch: person.batch,
+      batchLabel: batchLabel(person.batch),
     });
   }
 
-  return Object.values(byBranch)
-    .map((b) => ({
-      ...b,
-      advisers: b.advisers.sort((a, z) => batchSortKey(a.batch) - batchSortKey(z.batch)),
-      count: b.advisers.length,
+  return [...byBranch.values()]
+    .map((branch) => ({
+      ...branch,
+      advisers: branch.advisers.sort(
+        (a, b) => batchSortKey(a.batch) - batchSortKey(b.batch)
+      ),
+      count: branch.advisers.length,
     }))
-    .sort((a, z) => a.name.localeCompare(z.name));
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// Fixed order + colours for the Important Contacts groups.
+/* Fixed order and colours so the Important Contacts page looks the same
+   whatever order the backend returns rows in. */
 const CONTACT_GROUPS = [
-  { id: "director", type: "director",     title: "Director",                   sub: "Head of the institute",             color: "#37548f" },
-  { id: "deans",    type: "dean",         title: "Deans",                      sub: "Deans & associate deans",           color: "#4e9b72" },
-  { id: "student",  type: "student_body", title: "Student Body",               sub: "Council & student representatives", color: "#d18a3e" },
-  { id: "chairs",   type: "school_chair", title: "Department / School Chairs", sub: "Academic heads across schools",      color: "#c25b52" },
-  { id: "offices",  type: "school_office",title: "School Offices",             sub: "School administrative offices",      color: "#6fa3d0" },
+  { id: "director", type: "director",     title: "Director",
+    sub: "Head of the institute",             color: "#37548f" },
+  { id: "deans",    type: "dean",         title: "Deans",
+    sub: "Deans & associate deans",           color: "#4e9b72" },
+  { id: "student",  type: "student_body", title: "Student Body",
+    sub: "Council & student representatives", color: "#d18a3e" },
+  { id: "chairs",   type: "school_chair", title: "Department / School Chairs",
+    sub: "Academic heads across schools",     color: "#c25b52" },
+  { id: "offices",  type: "school_office", title: "School Offices",
+    sub: "School administrative offices",     color: "#6fa3d0" },
 ];
 
-function reshapeContacts(raw) {
-  const people = (Array.isArray(raw) ? raw : [])
-    .map(normalizeFaculty)
-    .filter((m) => m.type && m.type !== "adviser" && m.active !== false);
+function shapeContacts(rows, indexes) {
+  const people = (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeFaculty(row, indexes))
+    .filter((m) => m.active && m.type && m.type !== "adviser" && m.name);
 
-  return CONTACT_GROUPS
-    .map((g) => ({
-      ...g,
-      people: people
-        .filter((m) => m.type === g.type)
-        .map((m) => ({
-          id: m.id,
-          name: m.name,
-          role: m.designation || m.department || "",
-          department: m.department,
-          email: m.email,
-          phone: m.phone,
-          link: m.link,
-          office: m.office,
-        })),
-    }))
-    .filter((g) => g.people.length > 0);
+  return CONTACT_GROUPS.map((group) => ({
+    ...group,
+    people: people
+      .filter((m) => m.type === group.type)
+      .map((m) => ({
+        id: m.id,
+        name: m.name,
+        role: m.designation || m.department || "",
+        department: m.department,
+        email: m.email,
+        phone: m.phone,
+        link: m.link,
+        office: m.office,
+      })),
+  })).filter((group) => group.people.length > 0);
 }
 
-function isSubCouncillorRole(role) {
-  return (role || "").toLowerCase().includes("sub");
-}
+/* ===========================================================================
+   10. Team
 
-function normalizeMember(m) {
+   /team/ is already typed (council / secretary / support / faculty), so this
+   is mostly grouping: councillors and sub-councillors under their branch, and
+   support members collapsed into one card per team.
+   =========================================================================== */
+
+function shapeMember(row) {
   return {
-    id: m.id,
-    name: m.name,
-    role: m.role || "Council Member",
-    phone: m.phone || null,
-    photo_url: m.photo_url || null,
-    email: m.email || null,
-    linkedin: m.linkedin_url || null,
-    code: m.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase(),
+    id: row.id,
+    name: clean(row.name) || "",
+    role: clean(row.role) || "Council Member",
+    email: pick(row, "email"),
+    phone: pick(row, "phone", "contact"),
+    linkedin: pick(row, "linkedin_url", "linkedin"),
+    photo_url: pick(row, "photo_url"),
+    code: initials(row.name),
   };
 }
 
-function reshapeTeam(members) {
-  const list = Array.isArray(members) ? members : [];
+const byOrder = (a, b) => (a.order ?? 999) - (b.order ?? 999);
+const isSubCouncillor = (role) => /\bsub|assoc|deputy/i.test(String(role || ""));
 
-  const secretaryRaw = list.find((m) => m.type === "secretary");
-  const secretary = secretaryRaw
-    ? { ...normalizeMember(secretaryRaw), description: secretaryRaw.bio || "Academic Secretary" }
+function shapeTeam(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter((m) => m?.is_active !== false);
+
+  /* Secretary — the featured one wins, otherwise the lowest order. */
+  const secretaryRow =
+    list.filter((m) => m.type === "secretary").sort((a, b) => {
+      if (Boolean(b.is_featured) !== Boolean(a.is_featured))
+        return Boolean(b.is_featured) - Boolean(a.is_featured);
+      return byOrder(a, b);
+    })[0] || null;
+
+  const secretary = secretaryRow
+    ? {
+        ...shapeMember(secretaryRow),
+        description: clean(secretaryRow.bio) || "Academic Secretary",
+      }
     : null;
 
-  const councilRaw = list.filter((m) => m.type === "council");
-  const branchesMap = {};
+  /* Councillors, grouped by branch. */
+  const branches = new Map();
+  list
+    .filter((m) => m.type === "council")
+    .sort(byOrder)
+    .forEach((row) => {
+      const code = resolveBranchCode(pick(row, "branch_code", "branch"));
+      if (!code) return;
 
-  councilRaw
-    .sort((a, b) => (a.order || 99) - (b.order || 99))
-    .forEach((m) => {
-      const code = m.branch_code;
-      const meta = code && BRANCH_META[code];
-      if (!meta) return;
-
-      if (!branchesMap[code]) {
-        branchesMap[code] = {
+      const meta = branchMeta(code);
+      if (!branches.has(code)) {
+        branches.set(code, {
           id: code,
           code,
           name: meta.name,
           color: meta.color,
           councillor: null,
           subs: [],
-        };
+        });
       }
 
-      const norm = normalizeMember(m);
-      if (!isSubCouncillorRole(m.role) && !branchesMap[code].councillor) {
-        branchesMap[code].councillor = norm;
-      } else {
-        branchesMap[code].subs.push(norm);
-      }
+      const branch = branches.get(code);
+      const member = shapeMember(row);
+      if (!branch.councillor && !isSubCouncillor(row.role)) branch.councillor = member;
+      else branch.subs.push(member);
     });
 
-  const supportRaw = list.filter((m) => m.type === "support");
-  const supportTeams = supportRaw
-    .sort((a, b) => (a.order || 99) - (b.order || 99))
-    .map((m) => ({
-      id: m.id,
-      name: m.team_name || m.portfolio || m.name,
-      lead: m.name,
-      blurb: m.bio || "",
-      featured: m.is_featured ?? (m.order || 0) === 0,
-    }));
+  /* Support teams — several members can share a team, so collapse by name and
+     let the first (lowest order / featured) member be the listed lead. */
+  const supportTeams = [];
+  const teamsByName = new Map();
+  list
+    .filter((m) => m.type === "support")
+    .sort(byOrder)
+    .forEach((row) => {
+      const name = pick(row, "team_name", "portfolio") || row.name || "Team";
+      const key = slugKey(name);
+      if (!teamsByName.has(key)) {
+        const team = {
+          id: key || row.id,
+          name,
+          lead: clean(row.name) || "",
+          blurb: clean(row.bio) || "",
+          featured: Boolean(row.is_featured),
+          members: [],
+        };
+        teamsByName.set(key, team);
+        supportTeams.push(team);
+      }
+      teamsByName.get(key).members.push(shapeMember(row));
+    });
+
+  /* The support screen highlights one card; if nobody is flagged, promote the
+     first so the layout still has its feature slot filled. */
+  if (supportTeams.length && !supportTeams.some((t) => t.featured)) {
+    supportTeams[0].featured = true;
+  }
+
+  return { secretary, branches: [...branches.values()], supportTeams };
+}
+
+/* ===========================================================================
+   11. Resources
+
+   Resource categories are free text in the admin panel ("syllabus", "form",
+   "Useful Link", …) while the page has three fixed tabs. Rather than trusting
+   one exact string, the whole collection is fetched once and bucketed by
+   keyword, with the file/URL shape as a tie-breaker.
+   =========================================================================== */
+
+const RESOURCE_BUCKETS = {
+  forms: ["form", "application", "template", "undertaking", "affidavit"],
+  links: ["link", "portal", "website", "external", "site", "drive"],
+  papers: ["paper", "pyq", "question", "previous", "exam"],
+  documents: [
+    "document", "doc", "pdf", "regulation", "ordinance", "policy", "syllabus",
+    "calendar", "handbook", "guide", "manual", "minutes", "circular", "notice",
+    "report", "archive", "curriculum",
+  ],
+};
+
+function bucketOf(resource) {
+  const category = slugKey(resource.category);
+  for (const [bucket, keywords] of Object.entries(RESOURCE_BUCKETS)) {
+    if (keywords.some((k) => category.includes(k))) return bucket;
+  }
+  /* No usable category: a bare web link is a link, anything else is a doc. */
+  const url = resource.file_url || "";
+  if (isHttp(url) && !/\.(pdf|docx?|xlsx?|pptx?|csv|zip)(\?|$)/i.test(url)) return "links";
+  return "documents";
+}
+
+/** Pick a badge that exists in the page's TAG_COLORS map where possible. */
+function resourceTag(resource, bucket, url) {
+  const category = slugKey(resource.category);
+  if (bucket === "forms" || category.includes("form")) return "Form";
+  if (/drive\.google\./i.test(url)) return "Drive";
+
+  if (bucket === "links") {
+    if (/library/i.test(url)) return "Library";
+    if (/erp|moodle|portal|samarth/i.test(url)) return "Portal";
+    if (/iitmandi\.ac\.in/i.test(url)) return "Official";
+    return "External";
+  }
+
+  if (category.includes("archive")) return "Archive";
+  if (category.includes("guide") || category.includes("handbook")) return "Guide";
+  if (/\.pdf(\?|$)/i.test(url) || category.includes("pdf")) return "PDF";
+  return "Document";
+}
+
+function shapeResource(row) {
+  const bucket = bucketOf(row);
+  const raw = pick(row, "file_url", "url", "link");
+  const url = isHttp(raw) ? raw : null;
+  /* A non-URL file_url is a storage key; the page trades it for a presigned
+     download link when the card is clicked. */
+  const fileKey = url ? pick(row, "file_key", "key", "storage_key") : raw;
+
+  const description =
+    pick(row, "description", "desc") ||
+    [titleCase(row.category), clean(row.academic_year)].filter(Boolean).join(" · ");
 
   return {
-    secretary,
-    branches: Object.values(branchesMap),
-    supportTeams,
+    id: row.id,
+    title: clean(row.title) || "Untitled",
+    desc: description || "",
+    tag: resourceTag(row, bucket, url || fileKey || ""),
+    url,
+    file_key: fileKey || null,
+    bucket,
+    academicYear: clean(row.academic_year),
   };
 }
 
-const RESOURCE_TAB_TO_CATEGORY = {
-  documents: "document",
-  links: "link",
-  forms: "form",
-  papers: "paper",
+async function loadResources() {
+  const rows = await getPaged("/resources/");
+  return rows.filter((r) => r?.is_active !== false).map(shapeResource);
+}
+
+/** Presigned-URL responses may be a bare string or a wrapper object. */
+function extractUrl(payload) {
+  if (!payload) return null;
+  if (typeof payload === "string") return isHttp(payload) ? payload : null;
+  return pick(payload, "url", "presigned_url", "signed_url", "file_url", "download_url");
+}
+
+/* ===========================================================================
+   12. Curriculum
+   =========================================================================== */
+
+const GE_SPECIALISATIONS = {
+  "GE-CS": "Computer Science",
+  "GE-EE": "Electrical Engineering",
+  "GE-ME": "Mechanical Engineering",
+  "GE-CE": "Civil Engineering",
+  "GE-BIO": "Bio Engineering",
+  "GE-DSAI": "Data Science & AI",
 };
 
-function reshapeResource(r) {
+/** True if a stored specialisation string matches the requested one. */
+function specialisationMatches(stored, wanted) {
+  if (!wanted) return true;
+  if (!stored) return false;
+  const a = slugKey(stored);
+  const b = slugKey(wanted);
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+  const label = GE_SPECIALISATIONS[String(wanted).toUpperCase()];
+  return label ? slugKey(label) === a || a.includes(slugKey(label)) : false;
+}
+
+/** Category-wise credit breakdown; the header total is the sum of the rows so
+    it can never contradict the bars underneath it. */
+function creditBreakdown(curriculum) {
+  const rows = [
+    ["Institute Compulsory", curriculum.ic_credits ?? curriculum.ic_compulsory_credits],
+    ["ICB", curriculum.icb_credits],
+    ["Discipline Core", curriculum.dc_credits],
+    ["Discipline Elective", curriculum.de_credits],
+    ["Free Elective", curriculum.fe_credits],
+    ["HSS / IKS", curriculum.hss_iks_credits],
+    ["MTP", curriculum.mtp_credits],
+    ["ISTP", curriculum.istp_credits],
+    ["Research", curriculum.research_credits],
+  ].map(([label, value]) => ({ label, credits: toNumber(value) }));
+
+  const summed = rows.reduce((total, row) => total + row.credits, 0);
   return {
-    title: r.title,
-    desc: r.academic_year
-      ? `${r.category} · ${r.academic_year}`
-      : r.category || "",
-    tag: r.category
-      ? r.category[0].toUpperCase() + r.category.slice(1)
-      : "Resource",
-    url: r.file_url || null,
-    file_key: null,
+    total: summed || toNumber(curriculum.total_credits),
+    rows: rows.filter((row) => row.credits > 0),
   };
 }
 
-export const resourcesApi = {
-  async category(tabId, fallbackItems) {
-    const category = RESOURCE_TAB_TO_CATEGORY[tabId] || tabId;
-    return withFallback(async () => {
-      const items = await request(
-        `/resources/?category=${encodeURIComponent(category)}`,
-      );
-      const reshaped = (items || []).map(reshapeResource);
+/** Curriculum-course rows may carry a specialisation in extra_data. */
+function courseSpecialisation(link, curriculum) {
+  return (
+    pick(link, "specialisation", "specialization") ||
+    pick(link.extra_data || {}, "specialisation", "specialization") ||
+    pick(curriculum, "specialization", "specialisation")
+  );
+}
 
-      return reshaped.length > 0 ? reshaped : fallbackItems;
-    }, fallbackItems);
-  },
+/* ===========================================================================
+   13. apiFetch — the virtual endpoints the pages call by path
+   =========================================================================== */
 
-  async presignedUrl(fileKey) {
-    return { data: { url: null }, source: "fallback" };
+const VIRTUAL_ROUTES = [
+  {
+    match: (p) => p === "/api/v1/team",
+    load: async () => shapeTeam(await getPaged("/team/", { params: { active_only: true } })),
   },
-};
+  {
+    match: (p) => p === "/api/v1/events",
+    load: async () =>
+      shapeEvents(await getPaged("/events/", { params: { upcoming_only: false } })),
+  },
+  {
+    match: (p) => p === "/api/v1/announcements",
+    load: async () => shapeAnnouncements(await getPaged("/announcements/")),
+  },
+  {
+    match: (p) => p === "/api/v1/faculty-advisers",
+    load: async () => {
+      const [rows, branchIndex, deptIndex] = await Promise.all([
+        getPaged("/faculty/"),
+        loadBranchIndex().catch(() => null),
+        loadDepartmentIndex().catch(() => null),
+      ]);
+      const shaped = shapeAdvisers(rows, { branchIndex, deptIndex });
+      if (!shaped.length) throw new ApiError("No faculty advisers returned");
+      return shaped;
+    },
+  },
+  {
+    match: (p) => p === "/api/v1/important-contacts",
+    load: async () => {
+      const [rows, branchIndex, deptIndex] = await Promise.all([
+        getPaged("/faculty/"),
+        loadBranchIndex().catch(() => null),
+        loadDepartmentIndex().catch(() => null),
+      ]);
+      const shaped = shapeContacts(rows, { branchIndex, deptIndex });
+      if (!shaped.length) throw new ApiError("No contacts returned");
+      return shaped;
+    },
+  },
+  {
+    match: (p) => p.startsWith("/api/v1/events/banner"),
+    load: async (params) => {
+      const key = params.get("key");
+      if (!key) throw new ApiError("events/banner needs a key");
+      const url = extractUrl(await getCached(`/events/banner${qs({ key })}`));
+      if (!url) throw new ApiError("No banner URL returned");
+      return { url, key };
+    },
+  },
+  {
+    match: (p) => p.startsWith("/api/v1/resources/presigned"),
+    load: async (params) => {
+      const key = params.get("key");
+      if (!key) throw new ApiError("resources/presigned needs a key");
+      const url = extractUrl(await getCached(`/resources/presigned${qs({ key })}`));
+      if (!url) throw new ApiError("No presigned URL returned");
+      return { url, key };
+    },
+  },
+  {
+    match: (p) => p === "/api/v1/resources",
+    load: async (params) => {
+      const all = await loadResources();
+      const category = params.get("category");
+      return category ? all.filter((r) => r.bucket === category) : all;
+    },
+  },
+  {
+    match: (p) => p.startsWith("/api/v1/search"),
+    load: async (params) => {
+      const q = params.get("q");
+      if (!q) return [];
+      return (await getCached(`/search/${qs({ q, limit: params.get("limit") || 10 })}`)) || [];
+    },
+  },
+];
+
+/**
+ * Fetch one of the virtual endpoints above.
+ * Always resolves — never rejects — so a page can render its fallback.
+ */
+export async function apiFetch(path, fallbackData) {
+  const [pathname, query = ""] = String(path || "").split("?");
+  const params = new URLSearchParams(query);
+
+  const route = VIRTUAL_ROUTES.find((r) => r.match(pathname));
+  if (!route) {
+    console.warn(`[apiBridge] no route for "${path}" — using fallback`);
+    return { data: fallbackData, source: "fallback" };
+  }
+
+  return withFallback(() => route.load(params), fallbackData);
+}
+
+/* ===========================================================================
+   14. api — the typed calls
+   =========================================================================== */
 
 export const api = {
+  /** Department picker on the catalogue page. */
   async departments(fallbackData) {
     return withFallback(async () => {
-      const depts = await request("/departments/");
-      return (depts || []).map((d) => ({
-        id: d.id,
-        name: d.name,
-        code: d.code,
-      }));
+      const { list } = await loadDepartmentIndex();
+      if (!list.length) throw new ApiError("No departments returned");
+      return list;
     }, fallbackData);
   },
 
+  /** Every course, joined to its department slug. */
   async coursesLite(fallbackData) {
     return withFallback(async () => {
-      const courses = await request("/courses/lite");
-      return (courses || []).map((c) => ({
-        id: c.id,
-        code: c.code,
-        title: c.name,
-        dept: c.department_id || null,
-        credits: c.credits,
-      }));
+      const [deptIndex, rows] = await Promise.all([
+        loadDepartmentIndex().catch(() => null),
+        loadCourses(),
+      ]);
+      if (!rows.length) throw new ApiError("No courses returned");
+      return rows.map((row) => shapeCourseSummary(row, deptIndex));
     }, fallbackData);
   },
 
+  /**
+   * One course with its prerequisites and approved reviews. The three reads
+   * run in parallel and the two optional ones degrade to empty lists, so a
+   * missing review table never costs you the course page.
+   */
   async courseDetail(courseId, fallbackData) {
     return withFallback(async () => {
-      const [course, prereqs, reviews] = await Promise.all([
-        request(`/courses/${courseId}`),
-        request(`/courses/${courseId}/prerequisites`).catch(() => []),
-        request(`/reviews/course/${courseId}`).catch(() => []),
-      ]);
+      const [course, prerequisiteLinks, reviews, deptIndex, courseIndex] =
+        await Promise.all([
+          getCached(`/courses/${courseId}`),
+          getCached(`/courses/${courseId}/prerequisites`).catch(() => []),
+          request(`/reviews/course/${courseId}`).catch(() => []),
+          loadDepartmentIndex().catch(() => null),
+          loadCourseIndex().catch(() => new Map()),
+        ]);
 
-      let deptName = null;
-      if (course.department_id) {
-        try {
-          const dept = await request(`/departments/${course.department_id}`);
-          deptName = dept?.name || null;
-        } catch {
-          deptName = null;
-        }
-      }
+      if (!course) throw new ApiError(`Course ${courseId} not found`);
 
-      let prerequisites = [];
-      if ((prereqs || []).length > 0) {
-        try {
-          const allCourses = await request("/courses/lite");
-          const courseIndex = Object.fromEntries(
-            (allCourses || []).map((c) => [c.id, c]),
-          );
-          prerequisites = prereqs.map((p) => {
-            const c = courseIndex[p.prerequisite_id];
-            return c ? `${c.code} — ${c.name}` : p.prerequisite_id;
-          });
-        } catch {
-          prerequisites = prereqs.map((p) => p.prerequisite_id);
-        }
-      }
+      const prerequisites = (prerequisiteLinks || []).map((link) => {
+        const prerequisite = courseIndex.get(link.prerequisite_id);
+        return prerequisite
+          ? `${prerequisite.code} — ${prerequisite.name}`
+          : link.prerequisite_id;
+      });
+
+      const extra = course.extra_data || {};
 
       return {
         id: course.id,
-        code: course.code,
-        title: course.name,
-        dept: deptName,
-        credits: course.credits,
+        code: clean(course.code) || "",
+        title: clean(course.name) || "Untitled course",
+        dept: deptIndex?.byApiId.get(course.department_id)?.name ?? null,
+        credits: toNumber(course.credits),
         lecture_hours: course.lecture_hours ?? null,
         tutorial_hours: course.tutorial_hours ?? null,
         practical_hours: course.practical_hours ?? null,
         description:
-          course.extra_data?.about || course.extra_data?.description || "No description available yet.",
-        syllabus_url: course.syllabus_url || null,
+          pick(extra, "about", "description", "summary") ||
+          "No description available yet.",
+        syllabus_url: pick(course, "syllabus_url"),
         prerequisites,
-        reviews: (reviews || [])
+        reviews: (Array.isArray(reviews) ? reviews : [])
           .filter((r) => !r.status || r.status === "approved")
           .map((r) => ({
-            author: r.student_name || "Anonymous",
-            semester: r.semester_taken || "",
-            rating: r.rating,
-            text: r.review_text,
+            author: "Anonymous", // the schema no longer stores a submitter
+            semester: clean(r.semester_taken) || "",
+            rating: toNumber(r.rating),
+            text: clean(r.review_text) || "",
           })),
       };
     }, fallbackData);
   },
 
+  /**
+   * Submit a review. Deliberately throws on failure so the form can show its
+   * error state rather than silently pretending it worked.
+   *
+   * NOTE: the backend verifies an hCaptcha token before creating the review.
+   * Until an hCaptcha widget is mounted on the form, pass the token through
+   * as payload.h_captcha_token or set VITE_HCAPTCHA_TOKEN; the built-in value
+   * is hCaptcha's public test token and only works against test keys.
+   */
   async submitReview(payload) {
-    return request("/reviews/", {
+    const token =
+      payload?.h_captcha_token ||
+      payload?.captchaToken ||
+      ENV.VITE_HCAPTCHA_TOKEN ||
+      "10000000-aaaa-bbbb-cccc-000000000000";
+
+    const semester = String(payload?.semester || "").slice(0, 20);
+
+    const created = await request("/reviews/", {
       method: "POST",
       body: {
         course_id: payload.course_id,
-        student_name: payload.author === "Anonymous" ? null : payload.author,
-        rating: payload.rating,
+        rating: toNumber(payload.rating),
         review_text: payload.text,
+        ...(semester ? { semester_taken: semester } : null),
+        h_captcha_token: token,
       },
     });
+
+    /* A new review lands as "pending" and needs moderation, so the list the
+       page already fetched is still accurate — but drop the cache anyway so a
+       later visit picks up the approved copy. */
+    clearApiCache(`/reviews/course/${payload.course_id}`);
+    return created;
   },
 
-  async curriculum(deptId, fallbackData, { specialisation, batchYear } = {}) {
+  /**
+   * Curriculum for one branch.
+   *
+   * @param {string} branchCode  "CSE", "GE", … (the id used by the page)
+   * @param {*}      fallbackData
+   * @param {object} opts        { batchYear, specialisation }
+   * @returns {{data: {name, semesters, credits, batches, specialisations}|null, source: string}}
+   */
+  async curriculum(branchCode, fallbackData, { batchYear, specialisation } = {}) {
     return withFallback(async () => {
-      const [curricula, branches] = await Promise.all([
-        request("/curriculum/"),
-        request("/branches/").catch(() => []),
+      const [curricula, branchIndex] = await Promise.all([
+        getPaged("/curriculum/"),
+        loadBranchIndex().catch(() => null),
+      ]);
+      if (!curricula.length) throw new ApiError("No curricula returned");
+
+      /* 1. Narrow to this branch — by branch_id where the branch table lines
+            up, otherwise by the curriculum name ("B.Tech CSE 2026"). */
+      const code = resolveBranchCode(branchCode);
+      const branch = branchIndex?.byCode.get(code) || null;
+
+      let forBranch = branch
+        ? curricula.filter((c) => c.branch_id === branch.apiId)
+        : [];
+
+      if (!forBranch.length) {
+        const needle = slugKey(code);
+        const branchName = slugKey(BRANCH_META[code]?.name);
+        forBranch = curricula.filter((c) => {
+          const haystack = slugKey(`${c.name} ${c.branch?.code || ""} ${c.branch?.name || ""}`);
+          return (
+            (needle && haystack.includes(needle)) ||
+            (branchName && haystack.includes(branchName))
+          );
+        });
+      }
+      if (!forBranch.length) throw new ApiError(`No curriculum for ${branchCode}`);
+
+      /* 2. Apply the specialisation filter (General Engineering). */
+      const specialisations = [
+        ...new Set(forBranch.map((c) => clean(c.specialization)).filter(Boolean)),
+      ];
+      let candidates = forBranch;
+      if (specialisation) {
+        const matching = forBranch.filter((c) =>
+          specialisationMatches(c.specialization, specialisation)
+        );
+        if (matching.length) candidates = matching;
+      }
+
+      /* 3. Pick the requested batch, else the most recent one. */
+      const newestFirst = [...candidates].sort(
+        (a, b) => toNumber(b.batch_year) - toNumber(a.batch_year)
+      );
+      const selected =
+        (batchYear
+          ? candidates.find((c) => String(c.batch_year) === String(batchYear))
+          : null) || newestFirst[0];
+      if (!selected) throw new ApiError("No matching curriculum");
+
+      /* 4. Course list, joined to the course table for codes and titles. */
+      const [links, courseIndex] = await Promise.all([
+        getCached(`/curriculum/${selected.id}/courses`),
+        loadCourseIndex().catch(() => new Map()),
       ]);
 
-      if (!curricula || curricula.length === 0)
-        throw new Error("No curriculum found");
+      const bySemester = new Map();
+      for (const link of Array.isArray(links) ? links : []) {
+        const spec = courseSpecialisation(link, selected);
+        if (specialisation && spec && !specialisationMatches(spec, specialisation)) continue;
 
-      // 1. Narrow to the requested branch (fall back to all if we can't match).
-      const deptKey = String(deptId || "").toLowerCase();
-      const candidateBranch = (branches || []).find(
-        (b) =>
-          b.code?.toLowerCase().includes(deptKey) ||
-          b.name?.toLowerCase().includes(deptKey),
-      );
-
-      let branchCurricula = curricula;
-      if (candidateBranch) {
-        const forBranch = curricula.filter(
-          (c) => c.branch_id === candidateBranch.id,
-        );
-        if (forBranch.length) branchCurricula = forBranch;
+        const course = courseIndex.get(link.course_id);
+        const semester = toNumber(link.semester);
+        if (!bySemester.has(semester)) bySemester.set(semester, []);
+        bySemester.get(semester).push({
+          id: course?.id || null,
+          code: clean(course?.code) || "—",
+          title: clean(course?.name) || "Unknown course",
+          credits: toNumber(course?.credits),
+          category: clean(link.category),
+          isOptional: Boolean(link.is_optional),
+          basketId: link.basket_id ?? null,
+          specialisation: spec,
+        });
       }
 
-      // 2. Pick the record for the requested batch year; else the latest year.
-      const byYearDesc = [...branchCurricula].sort(
-        (a, b) => Number(b.batch_year) - Number(a.batch_year),
-      );
-      let match = null;
-      if (batchYear != null && batchYear !== "") {
-        match = branchCurricula.find(
-          (c) => String(c.batch_year) === String(batchYear),
-        );
-      }
-      if (!match) match = byYearDesc[0] || branchCurricula[0];
-
-      const ccs = await request(`/curriculum/${match.id}/courses`);
-
-      const filteredCcs = (ccs || []).filter((cc) => {
-        if (!specialisation) return true;
-        return !cc.specialisation || cc.specialisation === specialisation;
-      });
-
-      const bySemester = {};
-      for (const cc of filteredCcs) {
-        bySemester[cc.semester] = bySemester[cc.semester] || [];
-        bySemester[cc.semester].push(cc);
-      }
-
-      const allCourses = await request("/courses/lite");
-      const courseIndex = Object.fromEntries(
-        (allCourses || []).map((c) => [c.id, c]),
-      );
-
-      const semesters = Object.keys(bySemester)
-        .sort((a, b) => Number(a) - Number(b))
-        .map((semNum) => ({
-          num: Number(semNum),
-          courses: bySemester[semNum].map((cc) => {
-            const c = courseIndex[cc.course_id];
-            return {
-              id: c?.id || null,
-              code: c?.code || "—",
-              title: c?.name || "Unknown course",
-              credits: c?.credits || 0,
-              category: cc.category || null,
-              specialisation: cc.specialisation || null,
-            };
-          }),
+      const semesters = [...bySemester.keys()]
+        .sort((a, b) => a - b)
+        .map((num) => ({
+          num,
+          courses: bySemester.get(num).sort(
+            (a, b) =>
+              String(a.category || "").localeCompare(String(b.category || "")) ||
+              a.code.localeCompare(b.code)
+          ),
         }));
 
-      // 3. Credit breakdown. The header total is the SUM of the category rows,
-      //    so it can never disagree with the numbers shown beneath it. We only
-      //    fall back to the stored total_credits if no category data exists.
-      const num = (v) => {
-        const n = Number(v);
-        return Number.isFinite(n) ? n : 0;
-      };
-      const creditRows = [
-        { label: "Institute Compulsory", credits: num(match.ic_compulsory_credits ?? match.ic_credits) },
-        { label: "ICB",                  credits: num(match.icb_credits) },
-        { label: "Discipline Core",      credits: num(match.dc_credits) },
-        { label: "Discipline Elective",  credits: num(match.de_credits) },
-        { label: "Free Elective",        credits: num(match.fe_credits) },
-        { label: "HSS / IKS",            credits: num(match.hss_iks_credits) },
-        { label: "MTP",                  credits: num(match.mtp_credits) },
-        { label: "ISTP",                 credits: num(match.istp_credits) },
-        { label: "Research",             credits: num(match.research_credits) },
-      ];
-      const summedTotal = creditRows.reduce((s, r) => s + r.credits, 0);
-      const credits = match ? {
-        total: summedTotal || num(match.total_credits),
-        rows: creditRows.filter((r) => r.credits > 0),
-      } : null;
-
-      // 4. Every batch year available for this branch (latest first, de-duped).
+      /* 5. Every batch year on offer for this branch, newest first. */
       const batches = [
         ...new Set(
-          branchCurricula
-            .map((c) => (c.batch_year == null ? "" : String(c.batch_year)))
-            .filter(Boolean),
+          candidates.map((c) => (c.batch_year == null ? "" : String(c.batch_year))).filter(Boolean)
         ),
       ].sort((a, b) => Number(b) - Number(a));
 
-      return { dept: deptId, name: match.name, semesters, credits, batches };
+      return {
+        dept: branchCode,
+        branch: code,
+        name: clean(selected.name) || BRANCH_META[code]?.name || branchCode,
+        specialisation: clean(selected.specialization),
+        specialisations,
+        semesters,
+        credits: creditBreakdown(selected),
+        batches,
+      };
     }, fallbackData);
   },
 
-  async electiveBaskets(fallbackData) {
+  /** Elective baskets for a branch/batch, or the first curriculum on file. */
+  async electiveBaskets(fallbackData, { branchCode, batchYear } = {}) {
     return withFallback(async () => {
-      const curricula = await request("/curriculum/");
-      const match = (curricula || [])[0];
-      if (!match) throw new Error("No curriculum found");
-      const baskets = await request(`/curriculum/${match.id}/elective-baskets`);
-      return (baskets || []).map((b) => ({
-        name: b.name,
-        description: `${b.min_credits}–${b.max_credits} credits · Semester ${b.semester}`,
+      const curricula = await getPaged("/curriculum/");
+      if (!curricula.length) throw new ApiError("No curricula returned");
+
+      const code = branchCode ? resolveBranchCode(branchCode) : null;
+      const branchIndex = code ? await loadBranchIndex().catch(() => null) : null;
+      const branch = code ? branchIndex?.byCode.get(code) : null;
+
+      const selected =
+        curricula.find(
+          (c) =>
+            (!branch || c.branch_id === branch.apiId) &&
+            (!batchYear || String(c.batch_year) === String(batchYear))
+        ) || curricula[0];
+
+      const baskets = await getCached(`/curriculum/${selected.id}/elective-baskets`);
+      return (Array.isArray(baskets) ? baskets : []).map((b) => ({
+        id: b.id,
+        name: clean(b.name) || "Elective basket",
+        description: [
+          b.min_credits != null && b.max_credits != null
+            ? `${b.min_credits}–${b.max_credits} credits`
+            : null,
+          b.semester != null ? `Semester ${b.semester}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        minCredits: toNumber(b.min_credits),
+        maxCredits: toNumber(b.max_credits),
+        semester: b.semester ?? null,
         courses: [],
       }));
     }, fallbackData);
   },
+
+  /** Global search across courses, departments, branches, faculty, notices. */
+  async search(query, fallbackData = []) {
+    return withFallback(async () => {
+      const q = String(query || "").trim();
+      if (!q) return [];
+      const results = await getCached(`/search/${qs({ q, limit: 10 })}`);
+      return Array.isArray(results) ? results : [];
+    }, fallbackData);
+  },
+
+  submitFeedback,
 };
+
+/* ===========================================================================
+   15. resourcesApi
+   =========================================================================== */
+
+export const resourcesApi = {
+  /**
+   * Items for one Resources tab ("documents" | "links" | "forms" | "papers").
+   * The whole collection is fetched once and bucketed, so switching tabs is
+   * instant and a mis-typed category in the admin panel doesn't empty a tab.
+   */
+  async category(tabId, fallbackItems) {
+    const result = await withFallback(async () => {
+      const all = await loadResources();
+      return all.filter((item) => item.bucket === tabId);
+    }, fallbackItems);
+
+    /* Live but empty is still nothing to render — hand back the sample list
+       and say so, so the page shows its "sample data" banner honestly. */
+    if (result.source === "live" && result.data.length === 0) {
+      return { data: fallbackItems, source: "fallback" };
+    }
+    return result;
+  },
+
+  /** Trade a storage key for a time-limited download URL. */
+  async presignedUrl(fileKey) {
+    return withFallback(async () => {
+      if (!fileKey) throw new ApiError("presignedUrl needs a file key");
+      const url = extractUrl(await getCached(`/resources/presigned${qs({ key: fileKey })}`));
+      if (!url) throw new ApiError("No presigned URL returned");
+      return { url, key: fileKey };
+    }, { url: null });
+  },
+
+  /** Same trade for an event banner. */
+  async bannerUrl(bannerKey) {
+    return withFallback(async () => {
+      if (!bannerKey) throw new ApiError("bannerUrl needs a key");
+      if (isHttp(bannerKey)) return { url: bannerKey, key: bannerKey };
+      const url = extractUrl(await getCached(`/events/banner${qs({ key: bannerKey })}`));
+      if (!url) throw new ApiError("No banner URL returned");
+      return { url, key: bannerKey };
+    }, { url: null });
+  },
+};
+
+/* ===========================================================================
+   16. Feedback
+
+   The backend has no feedback table, so this posts to Formspree (or whatever
+   endpoint you configure). Without VITE_FORMSPREE_ID / VITE_FEEDBACK_ENDPOINT
+   it throws immediately rather than showing the user a false success screen.
+   =========================================================================== */
+
+export async function submitFeedback(payload) {
+  if (!FEEDBACK_ENDPOINT) {
+    throw new ApiError(
+      "Feedback is not configured — set VITE_FORMSPREE_ID or VITE_FEEDBACK_ENDPOINT"
+    );
+  }
+
+  const res = await fetch(FEEDBACK_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      name: payload?.name || "Anonymous",
+      email: payload?.email || "",
+      category: payload?.category || "General",
+      message: payload?.message || "",
+      submittedAt: new Date().toISOString(),
+    }),
+  });
+
+  if (!res.ok) {
+    throw new ApiError(`Feedback submission failed: ${res.status}`, {
+      status: res.status,
+      path: FEEDBACK_ENDPOINT,
+    });
+  }
+  return true;
+}
+
+export default api;
