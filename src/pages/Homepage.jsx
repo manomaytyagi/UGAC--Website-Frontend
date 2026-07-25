@@ -42,15 +42,15 @@ function mapAnnouncement(a) {
 
 const REGISTER = [
   { code: "01", title: "Notifications", to: "#notifications", acc: "var(--c-blue)",
-    desc: "Minutes of meetings, circulars, and new forms — everything the council posts for all students." },
+    desc: "Minutes of meetings, circulars and new forms: everything the council posts for all students." },
   { code: "02", title: "Courses", to: "/courses", acc: "var(--c-terra)",
-    desc: "The full catalogue by department, with course codes, credits, and student reviews." },
+    desc: "The full catalogue by department, with course codes, credits and student reviews." },
   { code: "03", title: "Curriculum", to: "/curriculum", acc: "var(--c-green)",
     desc: "B.Tech. structures for every branch and batch, with prerequisite maps you can trace." },
   { code: "04", title: "Resources", to: "/resources", acc: "var(--c-gold)",
-    desc: "Regulations, the academic calendar, forms, useful links, and step-by-step procedures." },
+    desc: "Regulations, the academic calendar, forms, useful links and step-by-step procedures." },
   { code: "05", title: "Community", to: "/community/important-contacts", acc: "var(--c-navy)",
-    desc: "Feedback, important contacts, and faculty advisers for every branch and year." },
+    desc: "Feedback, important contacts and faculty advisers for every branch and year." },
 ];
 
 const DOCS_FALLBACK = [
@@ -90,9 +90,9 @@ function ResItem({ item }) {
 }
 const COMMUNITY = [
   { code: "01", title: "Feedback", to: "/community/feedback", acc: "var(--c-blue)",
-    desc: "Share academic concerns, suggestions, and issues directly with the council.", cta: "Open the form" },
+    desc: "Share academic concerns, suggestions and issues directly with the council.", cta: "Open the form" },
   { code: "02", title: "Important Contacts", to: "/community/important-contacts", acc: "var(--c-green)",
-    desc: "The council team, courses team, and department chairs, all in one place.", cta: "View contacts" },
+    desc: "The council team, courses team and department chairs, all in one place.", cta: "View contacts" },
   { code: "03", title: "Faculty Advisers", to: "/community/faculty-advisers", acc: "var(--c-gold)",
     desc: "Advisers for every branch and year, with direct email and profile links.", cta: "Find your adviser" },
 ];
@@ -125,49 +125,6 @@ const scrollToId = (id) => (e) => {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 };
 
-function SlowTypewriter({ line1 = "Welcome To", line2 = "IIT Mandi", speed = 140 }) {
-  const [text1, setText1] = useState("");
-  const [text2, setText2] = useState("");
-
-  useEffect(() => {
-    let i1 = 0;
-    let i2 = 0;
-    setText1("");
-    setText2("");
-
-    const timer = setInterval(() => {
-      if (i1 < line1.length) {
-        setText1(line1.slice(0, i1 + 1));
-        i1++;
-      } else if (i2 < line2.length) {
-        setText2(line2.slice(0, i2 + 1));
-        i2++;
-      } else {
-        clearInterval(timer);
-      }
-    }, speed);
-
-    return () => clearInterval(timer);
-  }, [line1, line2, speed]);
-
-  const showCursorLine1 = text1.length < line1.length;
-
-  return (
-    <div className="hero-typewriter">
-      <div className="typewriter-line">
-        <span className="typewriter-text">{text1}</span>
-        {showCursorLine1 && <span className="typewriter-cursor">|</span>}
-      </div>
-      {(text1.length === line1.length || text2.length > 0) && (
-        <div className="typewriter-line">
-          <span className="typewriter-text">{text2}</span>
-          {!showCursorLine1 && <span className="typewriter-cursor">|</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Homepage() {
   const ref = useReveal();
   const [fastNet, setFastNet] = useState(false);
@@ -178,7 +135,7 @@ export default function Homepage() {
   const [docs, setDocs] = useState(DOCS_FALLBACK);         // Forms & documents
   const [links, setLinks] = useState(LINKS_FALLBACK);      // Portals & external
   const [loading, setLoading] = useState(true);
-  // Procedures stay static — see PROCEDURES above.
+  // Procedures stay static; see PROCEDURES above.
 
   useEffect(() => {
     let alive = true;
@@ -233,30 +190,19 @@ export default function Homepage() {
           <HeroMedia onFastNet={() => setFastNet(true)} />
           <div className="wrap hero__grid">
             <div className="hero__main">
-             <h1 className="reveal">
+              <h1 className="reveal">
                 UG Academic Council <em>IIT&nbsp;Mandi</em>
               </h1>
               <p className="hero__lead reveal">
                 The UG Academic Council keeps course information, curriculum structures,
-                official documents, and a direct line to the council in a single place —
+                official documents and a direct line to the council in a single place,
                 built by students, for students at IIT&nbsp;Mandi.
               </p>
-              <div className="hero__actions reveal">
-                <Link className="btn btn--solid" to="/courses">Browse courses <span className="arw">{ARROW}</span></Link>
-                <Link className="btn btn--ghost" to="/community/feedback">Raise a concern <span className="arw">{ARROW}</span></Link>
-              </div>
-            </div>
-            <div className="hero__aside reveal">
-              <SlowTypewriter line1="Welcome To" line2="IIT Mandi" speed={140} />
             </div>
           </div>
-          <aside className="ledger reveal" aria-label="Index summary">
-            <div className="ledger__row"><span className="ledger__k">Branches</span><span className="ledger__v">16</span></div>
-            <div className="ledger__row"><span className="ledger__k">Departments</span><span className="ledger__v">12</span></div>
-          </aside>
         </section>
 
-        {/* EVENT SPOTLIGHT — only inside the 7-day horizon */}
+        {/* EVENT SPOTLIGHT: only inside the 7-day horizon */}
         {horizonEvent && (
           <div className="wrap spotlight-wrap">
             <div className="spotlight reveal">
@@ -428,7 +374,7 @@ export default function Homepage() {
         <div className="wrap foot__in">
           <div className="foot__brand">
             <span className="brand__mark">UG Academic Council</span>
-            <p>Student Gymkhana, IIT Mandi. A central portal for academic governance — curriculum, resources, and a direct line to the council.</p>
+            <p>Student Gymkhana, IIT Mandi. A central portal for academic governance: curriculum, resources and a direct line to the council.</p>
           </div>
           <div>
             <h4>Sections</h4>
