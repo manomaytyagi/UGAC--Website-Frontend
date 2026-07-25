@@ -187,6 +187,50 @@
   .uc-fc-opt      { flex: 1 1 100%; }
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   DESKTOP — serpentine ("inverted S") layout
+   FlowCharts.jsx measures its own canvas and sets data-layout="serp" on
+   .uc-fc-canvas once there is room for at least two columns; below that the
+   vertical column above is used unchanged (phones / narrow tablets).
+   The engine passes grid-template-columns and column-gap in inline, from
+   COL_W / COL_GAP in FlowCharts.jsx, so JS and CSS can't drift apart.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* the chart needs the full page container once it goes horizontal.
+   NOTE: must stay below the .uc-fc-outer rule above — same specificity. */
+@media (min-width: 1000px) {
+  .uc-fc-outer { max-width: 1140px; }
+}
+
+[data-layout="serp"] .uc-fc-column {
+  display: grid;
+  justify-content: center;
+  align-items: center;
+  row-gap: 96px;
+}
+[data-layout="serp"] .uc-fc-slot { width: 100%; }
+
+/* nodes fill their track, so a row-to-row turn drops straight down */
+[data-layout="serp"] .uc-fc-box,
+[data-layout="serp"] .uc-fc-notebox { width: 100%; }
+[data-layout="serp"] .uc-fc-done    { max-width: 100%; }
+
+/* branch pills sit inside the column gap — keep them narrow and let them wrap
+   so they never spill over the boxes on either side */
+[data-layout="serp"] .uc-fc-branch {
+  max-width: 104px; white-space: normal; text-align: center; line-height: 1.3;
+}
+
+/* the option fan takes the cell the next node will occupy, and lays out ACROSS
+   its connector: v = connector runs along the row, so the buttons stack;
+                  h = connector drops a row, so the buttons sit side by side. */
+[data-layout="serp"] .uc-fc-fan {
+  margin-top: 0; width: 100%; max-width: none; gap: 14px;
+}
+[data-layout="serp"] .uc-fc-fan[data-axis="v"] { flex-direction: column; }
+[data-layout="serp"] .uc-fc-fan[data-axis="h"] { flex-direction: row; flex-wrap: nowrap; }
+[data-layout="serp"] .uc-fc-fan[data-axis="h"] .uc-fc-opt { min-width: 0; }
+
 /* reduced motion: keep curves drawn, drop the animation */
 @media (prefers-reduced-motion: reduce) {
   .uc-fc-line { stroke-dashoffset: 0 !important; animation: none !important; }

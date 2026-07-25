@@ -21,7 +21,7 @@ const TABS = [
     label: "Feedback",
     path: "/community/feedback",
     title: "Feedback",
-    intro: "Share academic concerns, suggestions, and issues with the UG Academic Council.",
+    intro: "Share academic concerns, suggestions and issues with the UG Academic Council.",
     Component: Feedback,
   },
   {
@@ -29,7 +29,7 @@ const TABS = [
     label: "Important Contacts",
     path: "/community/important-contacts",
     title: "Important Contacts",
-    intro: "Key academic contacts — the council team, courses team, and department chairs, all in one place.",
+    intro: "Key academic contacts — the council team, courses team and department chairs, all in one place.",
     Component: ImportantContacts,
   },
   {

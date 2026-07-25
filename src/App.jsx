@@ -10,6 +10,7 @@ import CurriculumPage from "./pages/CurriculumPage.jsx";
 import ResourcesPage from "./pages/ResourcesPage.jsx";
 import ProcedurePage from "./components/Resources/ProceduresPage.jsx";
 import CommunityPage from "./pages/CommunityPage.jsx";
+import AnnouncementsPage from "./pages/AnnouncementsPage.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 export default function App() {
@@ -69,6 +70,7 @@ export default function App() {
         <Route path="/curriculum" element={<CurriculumPage />} />
         <Route path="/resources" element={<ResourcesPage />} />
         <Route path="/resources/procedures/:slug" element={<ProcedurePage />} />
+        <Route path="/announcements" element={<AnnouncementsPage />} />
         
         <Route path="/community" element={<Navigate to="/community/feedback" replace />} />
         <Route path="/community/feedback" element={<CommunityPage type="feedback" />} />

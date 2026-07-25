@@ -354,7 +354,7 @@ function BranchCurriculum({ branch, onBack, reduce }) {
   const [batches, setBatches]       = useState(FALLBACK_BATCHES);
   const [semesters, setSemesters]   = useState([]);
   const [loading, setLoading]       = useState(true);
-  const [geSpec, setGeSpec]         = useState(null);
+  const [geSpec, setGeSpec]         = useState(GE_SPECIALISATIONS[0].code);
 
   const isGE = branch.id === "GE";
 

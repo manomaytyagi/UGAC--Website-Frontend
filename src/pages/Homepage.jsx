@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import "../styles/Homepage.css";
 import { apiFetch, resourcesApi } from "../lib/apiBridge";
+import HeroMedia from "../components/HomePage/HeroMedia.jsx";
 
 const ARROW = "\u2192";
 const HORIZON_DAYS = 7;
@@ -24,16 +25,6 @@ const dayDiff = (s) => {
   return Math.round((parseDate(s) - a) / 86400000);
 };
 
-/* ---- Demo data. Replace with live data from your backend. ---- */
-
-const NOTIFICATIONS_FALLBACK = [
-  { id: "f1", date: daysFromNow(-1),  tag: "Circular", title: "Mid-semester examination schedule released", isNew: true },
-  { id: "f2", date: daysFromNow(-4),  tag: "Form",     title: "Branch change application 2025–26 is now open", isNew: true },
-  { id: "f3", date: daysFromNow(-9),  tag: "Minutes",  title: "Academic Senate meeting — August minutes published" },
-  { id: "f4", date: daysFromNow(-15), tag: "Circular", title: "Add / drop window closes 20 August" },
-  { id: "f5", date: daysFromNow(-22), tag: "Notice",   title: "Revised academic calendar for the monsoon term" },
-];
-
 // Map an apiBridge announcement -> the shape this notice board renders.
 const NEW_WINDOW_DAYS = 14;
 function mapAnnouncement(a) {
@@ -50,15 +41,15 @@ function mapAnnouncement(a) {
 }
 
 const REGISTER = [
-  { code: "NTC \u00B7 Notices", title: "Notifications", to: "#notifications", acc: "var(--c-blue)",
+  { code: "01", title: "Notifications", to: "#notifications", acc: "var(--c-blue)",
     desc: "Minutes of meetings, circulars, and new forms — everything the council posts for all students." },
-  { code: "CRS \u00B7 Courses", title: "Courses", to: "/courses", acc: "var(--c-terra)",
+  { code: "02", title: "Courses", to: "/courses", acc: "var(--c-terra)",
     desc: "The full catalogue by department, with course codes, credits, and student reviews." },
-  { code: "CUR \u00B7 Curriculum", title: "Curriculum", to: "/curriculum", acc: "var(--c-green)",
+  { code: "03", title: "Curriculum", to: "/curriculum", acc: "var(--c-green)",
     desc: "B.Tech. structures for every branch and batch, with prerequisite maps you can trace." },
-  { code: "RES \u00B7 Resources", title: "Resources", to: "/resources", acc: "var(--c-gold)",
+  { code: "04", title: "Resources", to: "/resources", acc: "var(--c-gold)",
     desc: "Regulations, the academic calendar, forms, useful links, and step-by-step procedures." },
-  { code: "COM \u00B7 Community", title: "Community", to: "/community/important-contacts", acc: "var(--c-navy)",
+  { code: "05", title: "Community", to: "/community/important-contacts", acc: "var(--c-navy)",
     desc: "Feedback, important contacts, and faculty advisers for every branch and year." },
 ];
 
@@ -98,11 +89,11 @@ function ResItem({ item }) {
   );
 }
 const COMMUNITY = [
-  { code: "COM.01", title: "Feedback", to: "/community/feedback", acc: "var(--c-blue)",
+  { code: "01", title: "Feedback", to: "/community/feedback", acc: "var(--c-blue)",
     desc: "Share academic concerns, suggestions, and issues directly with the council.", cta: "Open the form" },
-  { code: "COM.02", title: "Important Contacts", to: "/community/important-contacts", acc: "var(--c-green)",
+  { code: "02", title: "Important Contacts", to: "/community/important-contacts", acc: "var(--c-green)",
     desc: "The council team, courses team, and department chairs, all in one place.", cta: "View contacts" },
-  { code: "COM.03", title: "Faculty Advisers", to: "/community/faculty-advisers", acc: "var(--c-gold)",
+  { code: "03", title: "Faculty Advisers", to: "/community/faculty-advisers", acc: "var(--c-gold)",
     desc: "Advisers for every branch and year, with direct email and profile links.", cta: "Find your adviser" },
 ];
 
@@ -134,47 +125,59 @@ const scrollToId = (id) => (e) => {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 };
 
+function SlowTypewriter({ line1 = "Welcome To", line2 = "IIT Mandi", speed = 140 }) {
+  const [text1, setText1] = useState("");
+  const [text2, setText2] = useState("");
+
+  useEffect(() => {
+    let i1 = 0;
+    let i2 = 0;
+    setText1("");
+    setText2("");
+
+    const timer = setInterval(() => {
+      if (i1 < line1.length) {
+        setText1(line1.slice(0, i1 + 1));
+        i1++;
+      } else if (i2 < line2.length) {
+        setText2(line2.slice(0, i2 + 1));
+        i2++;
+      } else {
+        clearInterval(timer);
+      }
+    }, speed);
+
+    return () => clearInterval(timer);
+  }, [line1, line2, speed]);
+
+  const showCursorLine1 = text1.length < line1.length;
+
+  return (
+    <div className="hero-typewriter">
+      <div className="typewriter-line">
+        <span className="typewriter-text">{text1}</span>
+        {showCursorLine1 && <span className="typewriter-cursor">|</span>}
+      </div>
+      {(text1.length === line1.length || text2.length > 0) && (
+        <div className="typewriter-line">
+          <span className="typewriter-text">{text2}</span>
+          {!showCursorLine1 && <span className="typewriter-cursor">|</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Homepage() {
   const ref = useReveal();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [subOpen, setSubOpen] = useState(false);     // mobile Community accordion
-  const [commOpen, setCommOpen] = useState(false);   // desktop Community dropdown
-  const ddRef = useRef(null);
-  const closeMenu = () => { setMenuOpen(false); setSubOpen(false); };
+  const [fastNet, setFastNet] = useState(false);
 
-  // Body scroll-lock + Escape-to-close + auto-close when resizing to desktop.
-  useEffect(() => {
-    document.body.classList.toggle("menu-open", menuOpen);
-    if (!menuOpen) return undefined;
-    const onKey = (e) => { if (e.key === "Escape") setMenuOpen(false); };
-    const mq = window.matchMedia("(min-width:641px)");
-    const onMq = (ev) => { if (ev.matches) setMenuOpen(false); };
-    document.addEventListener("keydown", onKey);
-    mq.addEventListener("change", onMq);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      mq.removeEventListener("change", onMq);
-      document.body.classList.remove("menu-open");
-    };
-  }, [menuOpen]);
-
-  useEffect(() => { if (!menuOpen) setSubOpen(false); }, [menuOpen]);
-
-  // Desktop Community dropdown: close on outside-click or Escape.
-  useEffect(() => {
-    if (!commOpen) return undefined;
-    const onDoc = (e) => { if (ddRef.current && !ddRef.current.contains(e.target)) setCommOpen(false); };
-    const onKey = (e) => { if (e.key === "Escape") setCommOpen(false); };
-    document.addEventListener("click", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("click", onDoc); document.removeEventListener("keydown", onKey); };
-  }, [commOpen]);
-
-  // ---- Live data (announcements / events / resources) with graceful fallback ----
-  const [notifications, setNotifications] = useState(NOTIFICATIONS_FALLBACK);
+  // ---- Live data (announcements / events / resources) fetched from API ----
+  const [notifications, setNotifications] = useState([]);
   const [upcoming, setUpcoming] = useState([]);            // event spotlight source
   const [docs, setDocs] = useState(DOCS_FALLBACK);         // Forms & documents
   const [links, setLinks] = useState(LINKS_FALLBACK);      // Portals & external
+  const [loading, setLoading] = useState(true);
   // Procedures stay static — see PROCEDURES above.
 
   useEffect(() => {
@@ -191,7 +194,7 @@ export default function Homepage() {
         if (!alive) return;
 
         const mapped = (ann.data || []).map(mapAnnouncement);
-        if (mapped.length) setNotifications(mapped);
+        setNotifications(mapped);
 
         setUpcoming((ev.data && ev.data.upcoming) || []);
 
@@ -200,7 +203,9 @@ export default function Homepage() {
 
         if (linksRes.data && linksRes.data.length) setLinks(linksRes.data);
       } catch {
-        /* keep the *_FALLBACK values already in state */
+        /* keep existing fallback data */
+      } finally {
+        if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
@@ -222,97 +227,14 @@ export default function Homepage() {
 
   return (
     <div className="ugac-home" ref={ref}>
-      <div className="masthead-rule" />
-
-      <header className="site-head">
-        <div className="wrap site-head__in">
-          <Link className="brand" to="/" aria-label="UG Academic Council, IIT Mandi — home">
-            <span className="brand__mark">UGAC</span>
-            <span className="brand__sub">IIT&nbsp;Mandi</span>
-          </Link>
-          <nav className="nav" aria-label="Primary">
-            <Link className="nav__link" to="/team">Team</Link>
-            <Link className="nav__link" to="/events">Events</Link>
-            <Link className="nav__link" to="/courses">Courses</Link>
-            <Link className="nav__link" to="/curriculum">Curriculum</Link>
-            <Link className="nav__link" to="/resources">Resources</Link>
-            <div className="nav__dd" ref={ddRef} onMouseLeave={() => setCommOpen(false)}>
-              <button
-                className="nav__link nav__dd-btn"
-                type="button"
-                aria-haspopup="true"
-                aria-expanded={commOpen}
-                onClick={() => setCommOpen((o) => !o)}
-              >
-                Community <span className="nav__caret" aria-hidden="true">{"\u25BE"}</span>
-              </button>
-              <div className={`nav__menu ${commOpen ? "is-open" : ""}`} role="menu">
-                <Link role="menuitem" to="/community/feedback" onClick={() => setCommOpen(false)}>Feedback</Link>
-                <Link role="menuitem" to="/community/important-contacts" onClick={() => setCommOpen(false)}>Important Contacts</Link>
-                <Link role="menuitem" to="/community/faculty-advisers" onClick={() => setCommOpen(false)}>Faculty Advisers</Link>
-              </div>
-            </div>
-          </nav>
-          <button
-            className="nav__ham"
-            type="button"
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={menuOpen}
-            aria-controls="mobileMenu"
-            onClick={() => setMenuOpen((o) => !o)}
-          >
-            <span className="nav__ham-box"><span className="nav__ham-line" /></span>
-          </button>
-        </div>
-      </header>
-
-      <nav
-        className={`mobile-menu ${menuOpen ? "is-open" : ""}`}
-        id="mobileMenu"
-        aria-label="Mobile navigation"
-      >
-        <span className="eyebrow mobile-menu__eyebrow">Menu</span>
-        <Link className="mobile-link" to="/team" style={{ "--acc": "var(--c-navy)" }} onClick={closeMenu}>
-          <span className="mm-dot" />Team<span className="mm-arw">{ARROW}</span>
-        </Link>
-        <Link className="mobile-link" to="/events" style={{ "--acc": "var(--c-terra)" }} onClick={closeMenu}>
-          <span className="mm-dot" />Events<span className="mm-arw">{ARROW}</span>
-        </Link>
-        <Link className="mobile-link" to="/courses" style={{ "--acc": "var(--c-blue)" }} onClick={closeMenu}>
-          <span className="mm-dot" />Courses<span className="mm-arw">{ARROW}</span>
-        </Link>
-        <Link className="mobile-link" to="/curriculum" style={{ "--acc": "var(--c-green)" }} onClick={closeMenu}>
-          <span className="mm-dot" />Curriculum<span className="mm-arw">{ARROW}</span>
-        </Link>
-        <Link className="mobile-link" to="/resources" style={{ "--acc": "var(--c-gold)" }} onClick={closeMenu}>
-          <span className="mm-dot" />Resources<span className="mm-arw">{ARROW}</span>
-        </Link>
-        <button
-          className="mobile-link mobile-link--parent"
-          type="button"
-          aria-expanded={subOpen}
-          aria-controls="mSub"
-          style={{ "--acc": "var(--c-teal)" }}
-          onClick={() => setSubOpen((o) => !o)}
-        >
-          <span className="mm-dot" />Community<span className="mm-caret" aria-hidden="true">{"\u25BE"}</span>
-        </button>
-        <div className={`mobile-sub ${subOpen ? "is-open" : ""}`} id="mSub">
-          <Link to="/community/feedback" onClick={closeMenu}>Feedback</Link>
-          <Link to="/community/important-contacts" onClick={closeMenu}>Important Contacts</Link>
-          <Link to="/community/faculty-advisers" onClick={closeMenu}>Faculty Advisers</Link>
-        </div>
-      </nav>
-
       <main>
         {/* HERO */}
         <section className="hero">
+          <HeroMedia onFastNet={() => setFastNet(true)} />
           <div className="wrap hero__grid">
-            <div>
-              <div className="hero__eyebrow eyebrow reveal">UG Academic Council — Student Gymkhana</div>
-              <h1 className="reveal">
-                Everything academic,<br />
-                in one <em>open register.</em>
+            <div className="hero__main">
+             <h1 className="reveal">
+                UG Academic Council <em>IIT&nbsp;Mandi</em>
               </h1>
               <p className="hero__lead reveal">
                 The UG Academic Council keeps course information, curriculum structures,
@@ -324,17 +246,14 @@ export default function Homepage() {
                 <Link className="btn btn--ghost" to="/community/feedback">Raise a concern <span className="arw">{ARROW}</span></Link>
               </div>
             </div>
-            <aside className="ledger reveal" aria-label="Index summary">
-              <div className="ledger__top">
-                <span className="eyebrow">Index</span>
-                <span className="ledger__dot" aria-hidden="true" />
-              </div>
-              <div className="ledger__row"><span className="ledger__k">Term</span><span className="ledger__v">Monsoon 25–26</span></div>
-              <div className="ledger__row"><span className="ledger__k">Branches</span><span className="ledger__v">16</span></div>
-              <div className="ledger__row"><span className="ledger__k">Departments</span><span className="ledger__v">12</span></div>
-              <div className="ledger__row"><span className="ledger__k">Notices</span><span className="ledger__v">{notifications.length}</span></div>
-            </aside>
+            <div className="hero__aside reveal">
+              <SlowTypewriter line1="Welcome To" line2="IIT Mandi" speed={140} />
+            </div>
           </div>
+          <aside className="ledger reveal" aria-label="Index summary">
+            <div className="ledger__row"><span className="ledger__k">Branches</span><span className="ledger__v">16</span></div>
+            <div className="ledger__row"><span className="ledger__k">Departments</span><span className="ledger__v">12</span></div>
+          </aside>
         </section>
 
         {/* EVENT SPOTLIGHT — only inside the 7-day horizon */}
@@ -343,7 +262,7 @@ export default function Homepage() {
             <div className="spotlight reveal">
               <div>
                 <div className="spot__head">
-                  <span className="spot__eyebrow">EVT · On the horizon</span>
+                  <span className="spot__eyebrow">On the horizon</span>
                   <span className="spot__count">{horizonEvent.count}</span>
                 </div>
                 <div className="spot__title">{horizonEvent.title}</div>
@@ -365,21 +284,18 @@ export default function Homepage() {
                 <span className="eyebrow sec-tag">The register</span>
                 <h2>Five sections, one desk.</h2>
               </div>
-              <p className="sec-head__aside">Each entry is a classification, not a step. Follow whichever one you need.</p>
-            </div>
+           </div>
             <div className="register">
               {REGISTER.map((e) =>
                 e.to.startsWith("#") ? (
                   <a className="entry reveal" href={e.to} onClick={scrollToId(e.to.slice(1))} key={e.title} style={{ "--acc": e.acc }}>
-                    <span className="entry__code">{e.code}</span>
-                    <span className="entry__title">{e.title} <span className="arw">{ARROW}</span></span>
-                    <span className="entry__desc">{e.desc}</span>
+                    <h3 className="entry__title">{e.title} <span className="arw">{ARROW}</span></h3>
+                    <p className="entry__desc">{e.desc}</p>
                   </a>
                 ) : (
                   <Link className="entry reveal" to={e.to} key={e.title} style={{ "--acc": e.acc }}>
-                    <span className="entry__code">{e.code}</span>
-                    <span className="entry__title">{e.title} <span className="arw">{ARROW}</span></span>
-                    <span className="entry__desc">{e.desc}</span>
+                    <h3 className="entry__title">{e.title} <span className="arw">{ARROW}</span></h3>
+                    <p className="entry__desc">{e.desc}</p>
                   </Link>
                 )
               )}
@@ -392,31 +308,48 @@ export default function Homepage() {
           <div className="wrap">
             <div className="sec-head reveal">
               <div>
-                <span className="eyebrow sec-tag">NTC · Notice board</span>
-                <h2>Straight from the council.</h2>
+                <span className="eyebrow sec-tag">Notice board</span>
+                <h2>Announcements</h2>
               </div>
-              <p className="sec-head__aside">Minutes, circulars, and new forms — posted for every undergraduate.</p>
-            </div>
-            <div className="notif-list reveal">
-              {notifications.map((n) => {
-                const d = n.date ? parseDate(n.date) : null;
-                const ext = isExternal(n.url);
-                const inner = (
-                  <>
-                    <span className="notif__date">{d ? <><b>{d.getDate()}</b> {MON[d.getMonth()]}</> : null}</span>
-                    <span className="notif__tag" style={{ "--acc": TAG_COLOR[n.tag] || "var(--c-terra)" }}>{n.tag}</span>
-                    <span className="notif__title">{n.title}</span>
-                    {n.isNew ? <span className="notif__new">New</span> : <span />}
-                  </>
-                );
-                const key = n.id || n.title;
-                return ext ? (
-                  <a className="notif" href={n.url} target="_blank" rel="noopener noreferrer" key={key}>{inner}</a>
-                ) : (
-                  <Link className="notif" to={n.url || "/resources"} key={key}>{inner}</Link>
-                );
-              })}
-            </div>
+             </div>
+            {loading ? (
+              <div className="notif-list reveal">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div className="notif-skeleton" key={i}>
+                    <div className="notif-skeleton__date" />
+                    <div className="notif-skeleton__content">
+                      <div className="notif-skeleton__line" style={{ width: "30%", height: 11 }} />
+                      <div className="notif-skeleton__line" style={{ width: "80%", height: 15 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="notif-list reveal" style={{ padding: "18px 20px" }}>
+                <p className="notif-empty" style={{ margin: 0 }}>No announcements posted yet.</p>
+              </div>
+            ) : (
+              <div className="notif-list reveal">
+                {notifications.map((n) => {
+                  const d = n.date ? parseDate(n.date) : null;
+                  const ext = isExternal(n.url);
+                  const inner = (
+                    <>
+                      <span className="notif__date">{d ? <><b>{d.getDate()}</b> {MON[d.getMonth()]}</> : null}</span>
+                      <span className="notif__tag" style={{ "--acc": TAG_COLOR[n.tag] || "var(--c-terra)" }}>{n.tag}</span>
+                      <span className="notif__title">{n.title}</span>
+                      {n.isNew ? <span className="notif__new">New</span> : <span />}
+                    </>
+                  );
+                  const key = n.id || n.title;
+                  return ext ? (
+                    <a className="notif" href={n.url} target="_blank" rel="noopener noreferrer" key={key}>{inner}</a>
+                  ) : (
+                    <Link className="notif" to={n.url || "/resources"} key={key}>{inner}</Link>
+                  );
+                })}
+              </div>
+            )}
             <div className="notif__foot reveal">
               <Link to="/resources">See all documents &amp; forms <span className="arw">{ARROW}</span></Link>
             </div>
@@ -428,17 +361,22 @@ export default function Homepage() {
           <div className="wrap">
             <div className="sec-head reveal">
               <div>
-                <span className="eyebrow sec-tag">RES · Quick links</span>
-                <h2>The paperwork, sorted.</h2>
+                <span className="eyebrow sec-tag">Quick links</span>
+                <h2>Resources</h2>
               </div>
-              <p className="sec-head__aside">The documents, procedures, and portals students ask for most.</p>
             </div>
             <div className="res-grid">
               <div className="res-col reveal">
                 <h3><span className="dot" style={{ "--acc": "var(--c-blue)" }} />Forms &amp; documents</h3>
-                {docs.map((d, i) => (
-                  <ResItem item={d} key={d.title || i} />
-                ))}
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, i) => <div className="res-skeleton" key={i} />)
+                ) : docs.length === 0 ? (
+                  <p className="res-empty">No documents available.</p>
+                ) : (
+                  docs.map((d, i) => (
+                    <ResItem item={d} key={d.title || i} />
+                  ))
+                )}
               </div>
               <div className="res-col reveal">
                 <h3><span className="dot" style={{ "--acc": "var(--c-green)" }} />Procedures</h3>
@@ -451,9 +389,15 @@ export default function Homepage() {
               </div>
               <div className="res-col reveal">
                 <h3><span className="dot" style={{ "--acc": "var(--c-gold)" }} />Portals &amp; external</h3>
-                {links.map((l, i) => (
-                  <ResItem item={l} key={l.title || i} />
-                ))}
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, i) => <div className="res-skeleton" key={i} />)
+                ) : links.length === 0 ? (
+                  <p className="res-empty">No portals available.</p>
+                ) : (
+                  links.map((l, i) => (
+                    <ResItem item={l} key={l.title || i} />
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -464,27 +408,17 @@ export default function Homepage() {
           <div className="wrap">
             <div className="sec-head reveal">
               <div>
-                <span className="eyebrow sec-tag">COM · Community</span>
-                <h2>Talk to the council.</h2>
+               <h2>Community</h2>
               </div>
-              <p className="sec-head__aside">Three ways to reach the people who can actually act on it.</p>
-            </div>
+           </div>
             <div className="comm-grid">
               {COMMUNITY.map((c) => (
                 <Link className="comm-card reveal" to={c.to} key={c.title} style={{ "--acc": c.acc }}>
-                  <span className="comm-card__code">{c.code}</span>
                   <h3>{c.title}</h3>
                   <p>{c.desc}</p>
                   <span className="comm-card__go">{c.cta} <span className="arw">{ARROW}</span></span>
                 </Link>
               ))}
-            </div>
-            <div className="comm-note reveal">
-              <p className="comm-note__t">
-                <strong>Need it to reach someone today?</strong> The feedback desk goes
-                straight to the academic secretary team.
-              </p>
-              <a href="mailto:acad.secy@iitmandi.ac.in">acad.secy@iitmandi.ac.in</a>
             </div>
           </div>
         </section>
@@ -515,9 +449,11 @@ export default function Homepage() {
             </div>
           </div>
         </div>
-        <div className="wrap foot__bar">
-          <span>© 2026 UG ACADEMIC COUNCIL · IIT MANDI</span>
-          <span>BUILT BY STUDENTS, FOR STUDENTS</span>
+        <div className="wrap">
+          <div className="foot__bar">
+            <span>© 2026 UG ACADEMIC COUNCIL · IIT MANDI</span>
+            <span>BUILT BY STUDENTS, FOR STUDENTS</span>
+          </div>
         </div>
       </footer>
     </div>

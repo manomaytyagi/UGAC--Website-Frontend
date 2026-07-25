@@ -1,10 +1,39 @@
-Docs/
-node_modules/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Environment & secrets
 .env
+.env.*
+!.env.example
+
+# Node
+node_modules/
 dist/
 build/
-__pycache__/
-.venv/
-images/
+.next/
+.nuxt/
+
+# Logs
 *.log
+
+# Images (screenshots)
+images/
+
+# Claude Code / AI tooling
+CLAUDE.md
+CODEBASE_LEARNED.md
+skills-lock.json
+.playwright-mcp/
 .agents/
+.claude/settings.local.json
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

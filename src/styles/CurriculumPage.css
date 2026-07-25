@@ -18,6 +18,18 @@
   outline: 2px solid #ee9116;
 }
 
+/* ── Credit card year tabs ──
+   The buttons carry inline styles (border/colour are branch-tinted when active),
+   so hover has to be !important to land. Scoped to data-on="false" so it never
+   fights the active tab's branch colour. */
+.uc-cc-year {
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.uc-cc-year[data-on="false"]:hover {
+  border-color: rgba(13, 27, 62, .38) !important;
+  color: #0d1b3e !important;
+}
+
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
   .uc-curriculum * {
