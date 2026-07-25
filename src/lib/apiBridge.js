@@ -525,6 +525,33 @@ async function loadCourseIndex() {
   return new Map(rows.map((c) => [c.id, c]));
 }
 
+/**
+ * `extra_data` is free-form JSON typed by admins, so "intended for" lists
+ * arrive as either a real array or a comma/slash separated string.
+ */
+function shapeList(value) {
+  const items = Array.isArray(value)
+    ? value
+    : String(value ?? "").split(/[,;/|\n]/);
+  return items
+    .map((item) =>
+      typeof item === "string"
+        ? clean(item)
+        : clean(item?.name) || clean(item?.code) || clean(item?.title)
+    )
+    .filter(Boolean);
+}
+
+/** A document link may be a full URL or a storage key. Accept both. */
+function documentUrl(...values) {
+  for (const value of values) {
+    const v = clean(value);
+    if (!v) continue;
+    return isHttp(v) ? v : storageUrl(v);
+  }
+  return null;
+}
+
 function shapeCourseSummary(row, deptIndex) {
   const dept =
     deptIndex?.byApiId.get(row.department_id)?.id ??
@@ -1212,14 +1239,36 @@ export const api = {
 
       if (!course) throw new ApiError(`Course ${courseId} not found`);
 
+      /* Objects, not strings: CourseDetailPage links each prerequisite
+         through to its own page, which needs the course id. */
       const prerequisites = (prerequisiteLinks || []).map((link) => {
         const prerequisite = courseIndex.get(link.prerequisite_id);
-        return prerequisite
-          ? `${prerequisite.code} — ${prerequisite.name}`
-          : link.prerequisite_id;
+        return {
+          id: prerequisite?.id ?? link.prerequisite_id ?? null,
+          code: clean(prerequisite?.code) || "",
+          title: clean(prerequisite?.name) || "",
+        };
       });
 
       const extra = course.extra_data || {};
+
+      /* Who the course is meant for, and the curriculum PDF. Both live in
+         extra_data today, so several spellings are read and a top-level
+         column wins if one is ever added. */
+      const programs = shapeList(
+        pick(course, "programs", "program") ??
+          pick(extra, "programs", "program", "intended_programs", "degrees", "degree")
+      );
+      const branches = shapeList(
+        pick(course, "branches", "branch") ??
+          pick(extra, "branches", "branch", "intended_branches", "eligible_branches")
+      ).map((value) => branchMeta(value));
+
+      const curriculumUrl = documentUrl(
+        pick(course, "curriculum_url", "curriculum_key"),
+        pick(extra, "curriculum_url", "curriculum", "curriculum_key", "curriculum_file_key"),
+        pick(course, "syllabus_url")
+      );
 
       return {
         id: course.id,
@@ -1234,6 +1283,11 @@ export const api = {
           pick(extra, "about", "description", "summary") ||
           "No description available yet.",
         syllabus_url: pick(course, "syllabus_url"),
+        curriculum_url: curriculumUrl,
+        curriculum_title:
+          pick(extra, "curriculum_title", "curriculum_label") || null,
+        programs,
+        branches,
         prerequisites,
         reviews: (Array.isArray(reviews) ? reviews : [])
           .filter((r) => !r.status || r.status === "approved")

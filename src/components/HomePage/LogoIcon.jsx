@@ -1,4 +1,4 @@
-import ugacLogo from "../../assets/UGAC Logo.jpeg";
+import ugacLogoIcon from "../../assets/UGAC Logo Icon.jpeg";
 
 export default function LogoIcon({ size = 36 }) {
   return (
@@ -6,25 +6,25 @@ export default function LogoIcon({ size = 36 }) {
       style={{
         width: size,
         height: size,
-        borderRadius: "50%",
-        display: "inline-block",
+        borderRadius: Math.max(8, size * 0.28),
+        background: "#fff",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
         overflow: "hidden",
-        position: "relative",
         flex: "0 0 auto",
       }}
       aria-hidden="true"
     >
       <img
-        src={ugacLogo}
+        src={ugacLogoIcon}
         alt=""
         style={{
-          width: size * 3.05,
-          height: size * 3.05,
-          maxWidth: "none",
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -41%)",
+          width: "88%",
+          height: "88%",
+          objectFit: "contain",
+          objectPosition: "center",
+          display: "block",
         }}
       />
     </span>

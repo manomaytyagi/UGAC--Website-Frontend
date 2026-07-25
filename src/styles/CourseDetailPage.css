@@ -23,14 +23,23 @@
   border-radius: 8px;
 }
 
-/* ── Input transitions ── */
-.ucd-page textarea,
-.ucd-page input[type="text"] {
-  transition: border-color .15s ease, box-shadow .15s ease;
+/* ── Prerequisite rows (link through to that course) ── */
+.ucd-page .ucd-prereq {
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
-.ucd-page textarea:focus,
-.ucd-page input:focus {
+.ucd-page .ucd-prereq:hover {
   border-color: #2e509e;
+  box-shadow: 0 6px 18px rgba(13, 27, 62, .09);
+  transform: translateY(-1px);
+}
+
+/* ── Curriculum PDF buttons ── */
+.ucd-page .ucd-doc-btn {
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.ucd-page .ucd-doc-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
 }
 
 /* ── Reduced motion ── */
