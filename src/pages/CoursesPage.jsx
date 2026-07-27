@@ -301,7 +301,7 @@ function DeptButton({ dept, side, count, onPick, density = 1 }) {
       style={{
         ...S.deptBtn,
         gap: 13 * density,
-        padding: `${12 * density}px ${15 * density}px`,
+        padding: `${11 * density}px ${14 * density}px`,
         flexDirection: left ? "row-reverse" : "row",
         textAlign: left ? "right" : "left",
         borderColor: hot ? dept.color : C.border,
@@ -309,9 +309,9 @@ function DeptButton({ dept, side, count, onPick, density = 1 }) {
         transform: hot ? (left ? "translateX(-4px)" : "translateX(4px)") : "none",
       }}
     >
-      <span style={{ ...S.deptAccent, width: 4, height: 32 * density, background: dept.color }} />
+      <span style={{ ...S.deptAccent, width: 4, height: 30 * density, background: dept.color }} />
       <span style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: left ? "flex-end" : "flex-start", minWidth: 0 }}>
-        <span style={{ ...S.deptName, fontSize: 15 * density }}>{dept.name}</span>
+        <span style={{ ...S.deptName, fontSize: 14.5 * density }}>{dept.name}</span>
         <span style={{ ...S.deptMeta, fontSize: 11.5 * density }}>{dept.short} · {count} course{count === 1 ? "" : "s"}</span>
       </span>
     </button>
@@ -388,6 +388,10 @@ function useMedia(query) {
 export default function CoursesPage() {
   const navigate = useNavigate();
   const isDesktop = useMedia("(min-width: 900px)");
+  // The full-viewport home only works if six tiles actually fit. On a short
+  // window it falls back to a normal scrolling page rather than clipping the
+  // bottom of a column.
+  const isTall = useMedia("(min-height: 760px)");
   const reduce = useMedia("(prefers-reduced-motion: reduce)");
 
   const [departments, setDepartments] = useState([]);
@@ -646,7 +650,7 @@ export default function CoursesPage() {
     </div>
   );
 
-  const homeFixed = view === "home" && isDesktop;
+  const homeFixed = view === "home" && isDesktop && isTall;
 
   return (
     <div className="uc-page" style={homeFixed ? S.pageHomeFixed : S.page}>
@@ -733,7 +737,10 @@ const S = {
     alignItems: "stretch", gap: "clamp(18px, 3.5vw, 52px)",
     marginTop: 18, width: "100%", height: "100%", maxHeight: "100%",
   },
-  deptCol: { display: "flex", flexDirection: "column", gap: 10, minHeight: 0, justifyContent: "center", overflowY: "auto", maxHeight: "100%" },
+  // No overflow here on purpose: six tiles are meant to fit the viewport, and
+  // when they cannot (short window) the whole page scrolls instead — see
+  // homeFixed below. An inner scrollbar in one hero column looks broken.
+  deptCol: { display: "flex", flexDirection: "column", gap: 10, minHeight: 0, justifyContent: "center" },
   emblemWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10 },
   emblemCaption: { fontSize: 11.5, fontWeight: 600, letterSpacing: 1.4, textTransform: "uppercase", color: C.textDim, margin: 0 },
   heroStack: { display: "flex", flexDirection: "column", alignItems: "center", gap: 26, marginTop: 24 },
@@ -741,12 +748,19 @@ const S = {
   deptBtn: {
     display: "flex", alignItems: "center", gap: 13,
     background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
-    padding: "12px 15px", cursor: "pointer", fontFamily: "inherit",
+    padding: "11px 14px", cursor: "pointer", fontFamily: "inherit",
     transition: "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
     width: "100%",
   },
-  deptAccent: { width: 4, height: 32, borderRadius: 4, flexShrink: 0 },
-  deptName: { fontSize: 15, fontWeight: 700, color: C.navyDeep, lineHeight: 1.2 },
+  deptAccent: { width: 4, height: 30, borderRadius: 4, flexShrink: 0 },
+  // Department names run long ("School of Mechanical and Materials
+  // Engineering"), so they wrap to at most two lines and ellipsize beyond it,
+  // which keeps every tile the same height.
+  deptName: {
+    fontSize: 14.5, fontWeight: 700, color: C.navyDeep, lineHeight: 1.22,
+    display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2,
+    overflow: "hidden",
+  },
   deptMeta: { fontSize: 11.5, fontWeight: 600, letterSpacing: 0.4, color: C.textDim, textTransform: "uppercase" },
   dept: { maxWidth: 1100, margin: "0 auto", position: "relative" },
   accentBar: { width: 64, height: 5, borderRadius: 4, marginBottom: 20 },

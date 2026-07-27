@@ -206,10 +206,15 @@
   width: 100%;
 }
 
+/* No overflow: six tiles are meant to fit the viewport. When they cannot,
+   the whole page scrolls (see the short-viewport rule at the end of this
+   file) rather than one hero column growing its own scrollbar. */
 .uc-dept-col {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
+  justify-content: center;
 }
 
 .uc-emblem-wrap {
@@ -252,7 +257,7 @@
   background: #ffffff;
   border: 1px solid #dce3f0;
   border-radius: 12px;
-  padding: 12px 15px;
+  padding: 11px 14px;
   cursor: pointer;
   font-family: inherit;
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
@@ -261,16 +266,23 @@
 
 .uc-dept-accent {
   width: 4px;
-  height: 32px;
+  height: 30px;
   border-radius: 4px;
   flex-shrink: 0;
 }
 
+/* Department names run long ("School of Mechanical and Materials
+   Engineering"), so they wrap to two lines and ellipsize past that, which
+   keeps every tile the same height. */
 .uc-dept-name {
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #0d1b3e;
-  line-height: 1.2;
+  line-height: 1.22;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .uc-dept-meta {
@@ -474,4 +486,18 @@
   background: #e2e8f0;
   border-radius: 6px;
   display: block;
+}
+/* ── Short viewports ──
+   The full-viewport home only works if six department tiles fit. Below this
+   height it becomes an ordinary scrolling page, so the hero is never clipped
+   and no column needs a scrollbar of its own. */
+@media (max-height: 759px) {
+  .uc-page--home-fixed {
+    height: auto;
+    overflow: visible;
+    padding-bottom: 72px;
+  }
+  .uc-hero-wrap-fixed {
+    overflow: visible;
+  }
 }
