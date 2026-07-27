@@ -286,7 +286,7 @@ function BookFlameEmblem({ size = 300, reduce }) {
   );
 }
 
-function DeptButton({ dept, side, count, onPick, density = 1 }) {
+function DeptButton({ dept, side, count, onPick, density = 1, compact = false }) {
   const [hot, setHot] = useState(false);
   const left = side === "left";
   return (
@@ -301,7 +301,7 @@ function DeptButton({ dept, side, count, onPick, density = 1 }) {
       style={{
         ...S.deptBtn,
         gap: 13 * density,
-        padding: `${11 * density}px ${14 * density}px`,
+        padding: `${(compact ? 9 : 11) * density}px ${14 * density}px`,
         flexDirection: left ? "row-reverse" : "row",
         textAlign: left ? "right" : "left",
         borderColor: hot ? dept.color : C.border,
@@ -309,7 +309,7 @@ function DeptButton({ dept, side, count, onPick, density = 1 }) {
         transform: hot ? (left ? "translateX(-4px)" : "translateX(4px)") : "none",
       }}
     >
-      <span style={{ ...S.deptAccent, width: 4, height: 30 * density, background: dept.color }} />
+      <span style={{ ...S.deptAccent, width: 4, height: (compact ? 26 : 30) * density, background: dept.color }} />
       <span style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: left ? "flex-end" : "flex-start", minWidth: 0 }}>
         <span style={{ ...S.deptName, fontSize: 14.5 * density }}>{dept.name}</span>
         <span style={{ ...S.deptMeta, fontSize: 11.5 * density }}>{dept.short} · {count} course{count === 1 ? "" : "s"}</span>
@@ -391,7 +391,11 @@ export default function CoursesPage() {
   // The full-viewport home only works if six tiles actually fit. On a short
   // window it falls back to a normal scrolling page rather than clipping the
   // bottom of a column.
-  const isTall = useMedia("(min-height: 760px)");
+  const isTall = useMedia("(min-height: 640px)");
+  // Below this the header stack (topbar + title + search) leaves too little
+  // room for six tiles, so the whole hero tightens up rather than pushing the
+  // bottom row off screen.
+  const compact = useMedia("(max-height: 900px)");
   const reduce = useMedia("(prefers-reduced-motion: reduce)");
 
   const [departments, setDepartments] = useState([]);
@@ -497,17 +501,19 @@ export default function CoursesPage() {
       : emblemBase;
     return (
       <div style={fixed ? S.homeColFixed : { ...S.home, animation: reduce ? "none" : "rise .5s ease both" }}>
-        <div style={S.topbar}>
+        <div style={{ ...S.topbar, marginBottom: compact ? 10 : 16 }}>
           <button style={S.backBtn} onClick={() => navigate("/")}>{isDesktop ? "← Back" : "←"}</button>
           <button style={S.linkBtn} onClick={() => navigate("/curriculum")}>View full curriculum →</button>
         </div>
 
         <div style={S.homeHeader}>
-          <p style={S.eyebrow}>Academic Resources</p>
-          <h1 style={S.pageH1}>Course Catalogue</h1>
+          <p style={{ ...S.eyebrow, margin: compact ? "0 0 3px" : "0 0 6px" }}>Academic Resources</p>
+          <h1 style={{ ...S.pageH1, ...(compact ? { fontSize: "clamp(24px, 3vw, 34px)" } : null) }}>
+            Course Catalogue
+          </h1>
         </div>
 
-        <div style={S.heroSearchWrap}>
+        <div style={{ ...S.heroSearchWrap, margin: compact ? "10px auto 0" : "18px auto 0" }}>
           <input
             style={S.heroSearchInput}
             placeholder="Search any course by name or code…"
@@ -546,11 +552,11 @@ export default function CoursesPage() {
 
         {isDesktop ? (
           <div style={fixed ? S.heroWrapFixed : undefined}>
-            <div style={S.heroGrid}>
-              <div style={{ ...S.deptCol, gap: 10 * deptDensity }}>
+            <div style={{ ...S.heroGrid, marginTop: compact ? 8 : 18 }}>
+              <div style={{ ...S.deptCol, gap: (compact ? 6 : 10) * deptDensity }}>
                 {loading
                   ? Array.from({ length: 6 }).map((_, i) => <DeptSkeleton key={i} side="left" density={deptDensity} />)
-                  : left.map(d => <DeptButton key={d.id} dept={d} side="left" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} />)}
+                  : left.map(d => <DeptButton key={d.id} dept={d} side="left" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} compact={compact} />)}
               </div>
 
               <div style={S.emblemWrap}>
@@ -558,10 +564,10 @@ export default function CoursesPage() {
                 <p style={S.emblemCaption}>Knowledge, kept alight.</p>
               </div>
 
-              <div style={{ ...S.deptCol, gap: 10 * deptDensity }}>
+              <div style={{ ...S.deptCol, gap: (compact ? 6 : 10) * deptDensity }}>
                 {loading
                   ? Array.from({ length: 6 }).map((_, i) => <DeptSkeleton key={i} side="right" density={deptDensity} />)
-                  : right.map(d => <DeptButton key={d.id} dept={d} side="right" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} />)}
+                  : right.map(d => <DeptButton key={d.id} dept={d} side="right" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} compact={compact} />)}
               </div>
             </div>
           </div>
@@ -653,7 +659,15 @@ export default function CoursesPage() {
   const homeFixed = view === "home" && isDesktop && isTall;
 
   return (
-    <div className="uc-page" style={homeFixed ? S.pageHomeFixed : S.page}>
+    <div
+      className="uc-page"
+      style={{
+        ...(homeFixed ? S.pageHomeFixed : S.page),
+        ...(compact
+          ? { padding: `${NAV_OFFSET - 18}px 24px ${homeFixed ? 12 : 48}px` }
+          : null),
+      }}
+    >
       {apiWaking && <div style={S.wakeToast}>API is waking up, please wait…</div>}
 
       {view === "home" ? renderHome(homeFixed) : renderDept()}
