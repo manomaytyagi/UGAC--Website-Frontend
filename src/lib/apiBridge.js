@@ -286,48 +286,74 @@ function titleCase(s) {
   return t ? t[0].toUpperCase() + t.slice(1) : "";
 }
 
+const uniq = (arr) => [...new Set(arr.filter(Boolean))];
+
 /* ===========================================================================
    4. Departments
 
-   CoursesPage renders a fixed picker of twelve departments keyed by slug
-   ("cse", "math", …) and CourseDetailPage colours its header from the display
-   name. The backend keys departments by UUID and names them however the admin
-   typed them, so every live row is resolved onto this canonical table — by
-   code first, then by a keyword in the name. Matching here is what lets live
-   names, colours and course counts reach the page instead of the static
-   sample list.
+   A backend row is a SCHOOL. A UI tile is a DISCIPLINE. Those are not the same
+   thing and the mapping between them is not 1:1 — SCEE teaches both CS and
+   Electrical, SMME teaches both Mechanical and Materials. The old resolver
+   returned a single department per row, so a merged school could only ever be
+   half right: SCEE consumed the `cse` tile and left `ee` with nothing, SMME
+   consumed `me` and left `mse` with nothing, and every course under either
+   school was bulk-attributed to whichever half won.
+
+   So resolution returns a LIST now. A merged school legitimately feeds two
+   tiles; the course-code prefix (CS301 -> cse, EE201 -> ee) is what assigns
+   each individual course to one of them. Disciplines with no school row of
+   their own (ece, dse) stay in the picker and are filled from course codes.
+
+   The picker list is also complete by construction — every canonical tile is
+   present whether or not a school backs it, and any live school we cannot
+   place is appended rather than dropped. Nothing the backend returns
+   disappears, and no tile silently falls back to hardcoded sample data.
    =========================================================================== */
 
+/* `codes` here are COURSE-CODE PREFIXES only. School codes live in
+   SCHOOL_DEPTS below, so there is exactly one place that knows how the
+   backend's org chart maps onto these tiles. */
 const DEPARTMENTS = [
   { id: "cse",  name: "Computer Science",       short: "CS", color: "#4f7cc4",
-    codes: ["CSE", "CS", "SCEE"],        keywords: ["computer"] },
+    codes: ["CSE", "CS"],                keywords: ["computer"] },
   { id: "ece",  name: "Electronics & Comm.",    short: "EC", color: "#d18a3e",
     codes: ["ECE", "EC"],                keywords: ["electronic", "communication"] },
   { id: "ee",   name: "Electrical Engineering", short: "EE", color: "#e0aa6b",
     codes: ["EE", "EEE"],                keywords: ["electrical"] },
   { id: "me",   name: "Mechanical Engineering", short: "ME", color: "#4e9b72",
-    codes: ["ME", "MECH", "SMME"],       keywords: ["mechanical"] },
+    codes: ["ME", "MECH"],               keywords: ["mechanical"] },
   { id: "ce",   name: "Civil Engineering",      short: "CE", color: "#c25b52",
-    codes: ["CE", "CIV", "SCENE"],       keywords: ["civil", "environmental"] },
+    codes: ["CE", "CIV"],                keywords: ["civil", "environmental"] },
   { id: "dse",  name: "Data Science & Eng.",    short: "DS", color: "#2f8f86",
-    codes: ["DSE", "DS", "DSAI"],        keywords: ["data science", "artificial intelligence"] },
+    codes: ["DSE", "DS", "DSAI"],        keywords: ["data science"] },
   { id: "math", name: "Mathematics",            short: "MA", color: "#37548f",
-    codes: ["MA", "MTH", "MATH", "MNC", "MC", "SMSS"],
-    keywords: ["mathemat", "statistic", "computing"] },
+    codes: ["MA", "MTH", "MATH", "MNC", "MC"],
+    keywords: ["mathemat", "statistic"] },
   { id: "phy",  name: "Physics",                short: "PH", color: "#6f7bd0",
-    codes: ["PH", "PHY", "EP", "SPS"],   keywords: ["physic"] },
+    codes: ["PH", "PHY", "EP"],          keywords: ["physic"] },
   { id: "chem", name: "Chemistry",              short: "CH", color: "#9c4a52",
-    codes: ["CH", "CY", "CHM", "CHEM", "SCS"],
-    keywords: ["chemistry", "chemical science"] },
+    codes: ["CH", "CY", "CHM", "CHEM"],  keywords: ["chemistry", "chemical science"] },
   { id: "bt",   name: "Biotechnology",          short: "BT", color: "#2f6e54",
-    codes: ["BT", "BIO", "BE", "SBB"],   keywords: ["bio"] },
+    codes: ["BT", "BIO", "BE"],          keywords: ["bio"] },
   { id: "mse",  name: "Materials Engineering",  short: "MT", color: "#a8682c",
     codes: ["MSE", "MS", "MT"],          keywords: ["material"] },
   { id: "hss",  name: "Humanities & Soc. Sci.", short: "HS", color: "#7a6cae",
-    codes: ["HSS", "HS", "SHSS"],        keywords: ["humanit", "social", "liberal"] },
+    codes: ["HSS", "HS"],                keywords: ["humanit", "social", "liberal"] },
+
+  /* These schools exist in the backend and previously had no tile at all, so
+     they were fetched, resolved to nothing, and discarded before render. */
+  { id: "cair", name: "AI & Robotics",           short: "AI", color: "#3f7d8c",
+    codes: ["CAIR", "AI", "RB"],         keywords: ["artificial intelligence", "robotic"] },
+  { id: "qst",  name: "Quantum Sci. & Tech.",    short: "QS", color: "#b03a42",
+    codes: ["QST", "QSE", "QT"],         keywords: ["quantum"] },
+  { id: "iks",  name: "Indian Knowledge Systems", short: "IK", color: "#8a6d3b",
+    codes: ["IKS", "IK"],                keywords: ["indian knowledge", "iksmha"] },
+  { id: "mgmt", name: "Management",              short: "MG", color: "#5c7a99",
+    codes: ["MGT", "MG", "MBA"],         keywords: ["management", "entrepreneur"] },
 ];
 
 const DEPT_PALETTE = DEPARTMENTS.map((d) => d.color);
+const DEPT_BY_ID = new Map(DEPARTMENTS.map((d) => [d.id, d]));
 
 const DEPT_BY_CODE = new Map();
 for (const dept of DEPARTMENTS) {
@@ -336,22 +362,61 @@ for (const dept of DEPARTMENTS) {
   }
 }
 
-/** Resolve an API department code or name onto the canonical table. */
-function resolveDepartment(raw) {
+/**
+ * Backend school code -> the discipline tiles it feeds. The only place a
+ * school code is interpreted.
+ *
+ * A two-entry value is not an unresolved ambiguity and not a "pick one" —
+ * SCEE really does teach both CS and Electrical courses, so it really does
+ * back both tiles. Which tile a given course lands on is decided per course
+ * by its own code prefix (see departmentForCourse). Split a school in the
+ * backend later and you just shorten its list here.
+ */
+const SCHOOL_DEPTS = {
+  SCEE:   ["cse", "ee"],
+  SMME:   ["me", "mse"],
+  SCENE:  ["ce"],
+  SCS:    ["chem"],
+  SHSS:   ["hss"],
+  SMSS:   ["math"],
+  SPS:    ["phy"],
+  SBB:    ["bt"],
+  CAIR:   ["cair"],
+  CQST:   ["qst"],
+  IKS:    ["iks"],
+  IKSMHA: ["iks"],
+  SOM:    ["mgmt"],
+};
+
+/**
+ * Resolve one department-ish string onto zero or more canonical ids.
+ *
+ * Order: explicit school table -> course-code table -> name keywords. The
+ * keyword pass deliberately collects EVERY hit instead of returning the first
+ * one, which is what makes "School of Computer and Electrical Engineering"
+ * come back as ["cse","ee"] even when its code is missing or renamed.
+ */
+function resolveDepartmentIds(raw) {
   const value = clean(raw);
-  if (!value) return null;
+  if (!value) return [];
 
   const code = String(value).toUpperCase().replace(/[^A-Z]/g, "");
-  if (DEPT_BY_CODE.has(code)) return DEPT_BY_CODE.get(code);
+  if (code && SCHOOL_DEPTS[code]) return [...SCHOOL_DEPTS[code]];
+  if (code && DEPT_BY_CODE.has(code)) return [DEPT_BY_CODE.get(code).id];
 
   const lower = String(value).toLowerCase();
-  for (const dept of DEPARTMENTS) {
-    if (dept.keywords.some((k) => lower.includes(k))) return dept;
-  }
-  return null;
+  return DEPARTMENTS.filter((d) => d.keywords.some((k) => lower.includes(k))).map(
+    (d) => d.id
+  );
 }
 
-/** "CS301" -> "cse". Used when a course row has no department_id. */
+/** Back-compat shim: first match only. Prefer resolveDepartmentIds. */
+function resolveDepartment(raw) {
+  const [id] = resolveDepartmentIds(raw);
+  return id ? DEPT_BY_ID.get(id) : null;
+}
+
+/** "CS301" -> "cse". Also the tie-breaker inside a merged school. */
 function departmentFromCourseCode(code) {
   const prefix = /^([A-Za-z]{2,4})/.exec(String(code || "").trim())?.[1];
   if (!prefix) return null;
@@ -360,38 +425,87 @@ function departmentFromCourseCode(code) {
 }
 
 /**
- * Fetch /departments/ once and index it both ways: a display list for the
- * picker, and UUID -> entry so course rows can be joined onto it.
+ * Fetch /departments/ once and build:
+ *
+ *   list    — ALWAYS the full canonical picker, in canonical order, annotated
+ *             with which live school rows back each tile, plus any live school
+ *             we could not place appended at the end.
+ *   byApiId — school UUID -> { apiId, apiCode, apiName, depts: [ids] }
+ *
+ * `list` being complete is the point: a tile with no school row is a real,
+ * knowable gap (`live: false`) rather than a silent switch to sample data,
+ * and the page no longer needs to filter the response against a hardcoded
+ * whitelist.
  */
 async function loadDepartmentIndex() {
   const rows = await getPaged("/departments/");
-  const list = [];
+  if (!rows.length) throw new ApiError("No departments returned");
+
   const byApiId = new Map();
-  const seen = new Set();
+  const schoolsByDept = new Map(); // deptId -> [record]
+  const unplaced = [];
 
   rows.forEach((row, i) => {
-    const canon = resolveDepartment(row.code) || resolveDepartment(row.name);
-    const entry = canon
-      ? { id: canon.id, name: canon.name, short: canon.short, color: canon.color }
-      : {
-          id: slugKey(row.code || row.name) || `dept-${i}`,
-          name: clean(row.name) || clean(row.code) || "Department",
-          short: (clean(row.code) || initials(row.name)).slice(0, 2).toUpperCase(),
-          color: DEPT_PALETTE[i % DEPT_PALETTE.length],
-        };
+    const depts = uniq([
+      ...resolveDepartmentIds(row.code),
+      ...resolveDepartmentIds(row.name),
+    ]);
 
-    entry.apiId = row.id;
-    entry.apiCode = clean(row.code);
-    entry.apiName = clean(row.name);
+    const record = {
+      apiId: row.id,
+      apiCode: clean(row.code),
+      apiName: clean(row.name),
+      depts,
+    };
+    byApiId.set(row.id, record);
 
-    byApiId.set(row.id, entry);
-    if (!seen.has(entry.id)) {
-      seen.add(entry.id);
-      list.push(entry);
+    if (!depts.length) {
+      /* Unknown school: surface it as its own tile instead of discarding it.
+         Add it to SCHOOL_DEPTS once you decide where it belongs. */
+      unplaced.push({
+        id: slugKey(row.code || row.name) || `dept-${i}`,
+        name: record.apiName || record.apiCode || "Department",
+        short: (record.apiCode || initials(row.name)).slice(0, 2).toUpperCase(),
+        color: DEPT_PALETTE[i % DEPT_PALETTE.length],
+        curated: false,
+        live: true,
+        shared: false,
+        apiId: row.id,
+        apiIds: [row.id],
+        apiCode: record.apiCode,
+        apiNames: [record.apiName].filter(Boolean),
+      });
+      return;
+    }
+
+    for (const id of depts) {
+      if (!schoolsByDept.has(id)) schoolsByDept.set(id, []);
+      schoolsByDept.get(id).push(record);
     }
   });
 
-  return { list, byApiId };
+  const list = DEPARTMENTS.map((dept) => {
+    const schools = schoolsByDept.get(dept.id) || [];
+    return {
+      id: dept.id,
+      name: dept.name,
+      short: dept.short,
+      color: dept.color,
+      curated: true,
+      /* true when a live school row feeds this tile. false means the tile is
+         populated purely from course codes — still live data, still real. */
+      live: schools.length > 0,
+      /* true when this tile shares its school with another tile, i.e. the
+         school's own name is NOT a safe label for this tile. */
+      shared: schools.some((s) => s.depts.length > 1),
+      apiId: schools[0]?.apiId ?? null,
+      apiIds: schools.map((s) => s.apiId),
+      apiCode: schools[0]?.apiCode ?? null,
+      apiNames: schools.map((s) => s.apiName).filter(Boolean),
+    };
+  }).concat(unplaced);
+
+  return { list, byApiId, schoolsByDept };
 }
 
 /* ===========================================================================
@@ -552,17 +666,37 @@ function documentUrl(...values) {
   return null;
 }
 
+/**
+ * Which tile does this course belong to?
+ *
+ *   1. course-code prefix, when the school agrees (or has no opinion)
+ *   2. the school, when it maps to exactly one tile
+ *   3. course-code prefix, when it contradicts a merged school — a code is
+ *      more specific evidence than "somewhere inside SCEE"
+ *   4. null — deliberately unassigned rather than dumped into one half of a
+ *      merged school, which is the bug this section exists to kill
+ */
+function departmentForCourse(row, deptIndex) {
+  const candidates = deptIndex?.byApiId.get(row.department_id)?.depts ?? [];
+  const prefix = departmentFromCourseCode(row.code);
+
+  if (prefix && (!candidates.length || candidates.includes(prefix))) return prefix;
+  if (candidates.length === 1) return candidates[0];
+  if (prefix) return prefix;
+  return null;
+}
+
 function shapeCourseSummary(row, deptIndex) {
-  const dept =
-    deptIndex?.byApiId.get(row.department_id)?.id ??
-    departmentFromCourseCode(row.code) ??
-    null;
+  const candidates = deptIndex?.byApiId.get(row.department_id)?.depts ?? [];
 
   return {
     id: row.id,
     code: clean(row.code) || "",
     title: clean(row.name) || "Untitled course",
-    dept,
+    dept: departmentForCourse(row, deptIndex),
+    /* Kept so a page can show "CS or EE" rather than nothing when a merged
+       school's course has an unrecognised code prefix. */
+    deptCandidates: candidates,
     credits: toNumber(row.credits),
   };
 }
@@ -724,6 +858,18 @@ function normalizeFaculty(row, { branchIndex, deptIndex } = {}) {
   const branchEntry = branchIndex?.byApiId.get(row.branch_id) || null;
   const deptEntry = deptIndex?.byApiId.get(row.department_id) || null;
 
+  /* A faculty member belongs to a SCHOOL, so the school's own name is the
+     right label here — unlike a course, there is nothing to disambiguate.
+     The canonical tile name is only a backstop for rows with a blank name. */
+  const deptLabel =
+    deptEntry?.apiName ||
+    (deptEntry?.depts?.length === 1
+      ? DEPT_BY_ID.get(deptEntry.depts[0])?.name
+      : null) ||
+    deptEntry?.apiCode ||
+    pick(row, "department", "dept") ||
+    "";
+
   return {
     id: row.id ?? pick(row, "email", "name"),
     name: clean(row.name) || "",
@@ -732,7 +878,7 @@ function normalizeFaculty(row, { branchIndex, deptIndex } = {}) {
     link: pick(row, "linkedin_url", "linkedin", "profile_url", "link"),
     photo: pick(row, "photo_url", "photo", "image_url"),
     designation,
-    department: deptEntry?.apiName || deptEntry?.name || pick(row, "department", "dept") || "",
+    department: deptLabel,
     office: pick(row, "office_location", "office"),
     branch: branchEntry?.code || resolveBranchCode(pick(row, "branch", "branch_code")),
     branchName: branchEntry?.name || null,
@@ -1200,11 +1346,17 @@ export async function apiFetch(path, fallbackData) {
    =========================================================================== */
 
 export const api = {
-  /** Department picker on the catalogue page. */
+  /**
+   * Department picker on the catalogue page.
+   *
+   * The list is complete by construction — every canonical tile is present,
+   * plus any live school that could not be placed — so the page should render
+   * it as-is rather than filtering it against a hardcoded whitelist. Tiles
+   * carry `live`/`shared` if you want to mark the ones no school backs.
+   */
   async departments(fallbackData) {
     return withFallback(async () => {
       const { list } = await loadDepartmentIndex();
-      if (!list.length) throw new ApiError("No departments returned");
       return list;
     }, fallbackData);
   },
@@ -1270,11 +1422,20 @@ export const api = {
         pick(course, "syllabus_url")
       );
 
+      /* The discipline, not the school: an EE course inside SCEE should say
+         "Electrical Engineering", not "School of Computer and Electrical
+         Engineering". The school name is only the backstop. */
+      const deptId = departmentForCourse(course, deptIndex);
+
       return {
         id: course.id,
         code: clean(course.code) || "",
         title: clean(course.name) || "Untitled course",
-        dept: deptIndex?.byApiId.get(course.department_id)?.name ?? null,
+        dept:
+          DEPT_BY_ID.get(deptId)?.name ??
+          deptIndex?.byApiId.get(course.department_id)?.apiName ??
+          null,
+        deptId: deptId ?? null,
         credits: toNumber(course.credits),
         lecture_hours: course.lecture_hours ?? null,
         tutorial_hours: course.tutorial_hours ?? null,
