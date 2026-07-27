@@ -12,22 +12,30 @@ function tint(hex, a) {
 
 const NAV_OFFSET = 92;
 
+// The twelve departments the backend actually has, in render order:
+// the first six fill the left column, the last six the right.
+// `id` matches the id apiBridge assigns (the department code, lowercased),
+// so live names, colours and counts land on the right tile.
 const FALLBACK_DEPARTMENTS = [
   // left column
-  { id: "cse",  name: "Computer Science",        short: "CS", color: "#4f7cc4" },
-  { id: "ece",  name: "Electronics & Comm.",     short: "EC", color: "#d18a3e" },
-  { id: "ee",   name: "Electrical Engineering",  short: "EE", color: "#e0aa6b" },
-  { id: "me",   name: "Mechanical Engineering",  short: "ME", color: "#4e9b72" },
-  { id: "ce",   name: "Civil Engineering",       short: "CE", color: "#c25b52" },
-  { id: "dse",  name: "Data Science & Eng.",     short: "DS", color: "#2f8f86" },
+  { id: "scee",  code: "SCEE",  name: "School of Computer and Electrical Engineering", short: "SCEE",  color: "#4f7cc4" },
+  { id: "scene", code: "SCENE", name: "School of Civil and Environmental Engineering", short: "SCENE", color: "#c25b52" },
+  { id: "scs",   code: "SCS",   name: "School of Chemical Sciences",                   short: "SCS",   color: "#9c4a52" },
+  { id: "shss",  code: "SHSS",  name: "School of Humanities and Social Sciences",      short: "SHSS",  color: "#7a6cae" },
+  { id: "smme",  code: "SMME",  name: "School of Mechanical and Materials Engineering", short: "SMME", color: "#4e9b72" },
+  { id: "smss",  code: "SMSS",  name: "School of Mathematics and Statistical Sciences", short: "SMSS", color: "#37548f" },
   // right column
-  { id: "math", name: "Mathematics",             short: "MA", color: "#37548f" },
-  { id: "phy",  name: "Physics",                 short: "PH", color: "#6f7bd0" },
-  { id: "chem", name: "Chemistry",               short: "CH", color: "#9c4a52" },
-  { id: "bt",   name: "Biotechnology",           short: "BT", color: "#2f6e54" },
-  { id: "mse",  name: "Materials Engineering",   short: "MT", color: "#a8682c" },
-  { id: "hss",  name: "Humanities & Soc. Sci.",  short: "HS", color: "#7a6cae" },
+  { id: "sps",   code: "SPS",   name: "School of Physical Sciences",                   short: "SPS",   color: "#6f7bd0" },
+  { id: "sbb",   code: "SBB",   name: "School of Biosciences and Bioengineering",      short: "SBB",   color: "#2f6e54" },
+  { id: "som",   code: "SOM",   name: "School of Management",                          short: "SOM",   color: "#5c7a99" },
+  { id: "cair",  code: "CAIR",  name: "Centre for Artificial Intelligence and Robotics", short: "CAIR", color: "#3f7d8c" },
+  { id: "cqst",  code: "CQST",  name: "Centre for Quantum Science and Technology",     short: "CQST",  color: "#b03a42" },
+  { id: "iks",   code: "IKS",   name: "IKSMHA",                                        short: "IKS",   color: "#8a6d3b" },
 ];
+
+// Render order for whatever the API returns. Anything not listed here is
+// appended, so a new department shows up without a code change.
+const DEPT_ORDER = FALLBACK_DEPARTMENTS.map(d => d.id);
 
 const DEPT_META = Object.fromEntries(FALLBACK_DEPARTMENTS.map(d => [d.id, d]));
 const DEPT_PALETTE = FALLBACK_DEPARTMENTS.map(d => d.color);
@@ -43,21 +51,15 @@ function decorateDepts(list) {
   });
 }
 
-// The live API can return extra, loosely-defined rows (research centres,
-// exchange programs, "Institute Core", etc.) that aren't proper departments
-// yet. Until that data is cleaned up, the home picker only shows the 12
-// curated departments (6 + 6) defined in FALLBACK_DEPARTMENTS, matched by
-// id/name/short so we still use live names/colors/counts where available.
-function curatedOnly(depts) {
-  const byKey = {};
-  depts.forEach(d => {
-    [d.id, d.name, d.short].forEach(k => {
-      if (k) byKey[String(k).toLowerCase()] = d;
-    });
-  });
-  return FALLBACK_DEPARTMENTS
-    .map(canon => byKey[canon.id] || byKey[canon.name.toLowerCase()] || byKey[(canon.short || "").toLowerCase()] || canon)
-    .slice(0, 12);
+// Order the live departments for display and cap the picker at twelve
+// (six per column). Every row the API returns is a real department, so
+// nothing is filtered out by name — only ordered.
+function orderDepts(depts) {
+  const rank = (d) => {
+    const i = DEPT_ORDER.indexOf(String(d.id).toLowerCase());
+    return i === -1 ? DEPT_ORDER.length : i;
+  };
+  return [...depts].sort((a, b) => rank(a) - rank(b)).slice(0, 12);
 }
 
 function mk(prefix, dept, rows) {
@@ -189,30 +191,22 @@ function withMeta(c) {
 }
 
 function deptPrefix(dep) {
-  const base = (dep.short || dep.name || "").replace(/[^A-Za-z]/g, "");
-  return (base.slice(0, 2) || "XX").toUpperCase();
+  const base = (dep.code || dep.short || dep.name || "").replace(/[^A-Za-z]/g, "");
+  return (base.slice(0, 4) || "XX").toUpperCase();
 }
 function codePrefix(code) {
   const m = /^([A-Za-z]{2,4})/.exec((code || "").trim());
   return m ? m[1] : "";
 }
 
+// apiBridge already assigns every course to a department (by department_id,
+// falling back to the course-code prefix), so the page does not second-guess
+// it — it only checks the id is one we are rendering. A course whose
+// department could not be determined stays out of the picker rather than
+// being guessed into the wrong tile.
 function resolveCourseDept(course, depts) {
-  const raw = (course.dept ?? "").toString().trim().toLowerCase();
-  if (raw) {
-    for (const dep of depts) {
-      if (raw === String(dep.id).toLowerCase()
-        || raw === String(dep.name).toLowerCase()
-        || raw === String(dep.short || "").toLowerCase()) return dep.id;
-    }
-  }
-  const pre = codePrefix(course.code).toLowerCase();
-  if (pre) {
-    for (const dep of depts) {
-      if (String(dep.short || "").toLowerCase() === pre || deptPrefix(dep).toLowerCase() === pre) return dep.id;
-    }
-  }
-  return course.dept;
+  const raw = String(course.dept ?? "").trim().toLowerCase();
+  return depts.some(d => String(d.id).toLowerCase() === raw) ? raw : null;
 }
 
 function buildPlaceholderCourses(depts) {
@@ -426,7 +420,7 @@ export default function CoursesPage() {
       clearTimeout(wakeTimer);
       setApiWaking(false);
 
-      const depts = curatedOnly(decorateDepts(deptRes.data));
+      const depts = orderDepts(decorateDepts(deptRes.data));
       const deptIds = new Set(depts.map(d => d.id));
 
       const liveCourses = (courseRes.data || [])
@@ -459,9 +453,7 @@ export default function CoursesPage() {
     return m;
   }, [courses]);
 
-  // departments is capped at 12 (6+6) by curatedOnly, so this split is
-  // normally exactly even; the density scaling below is just a safety net
-  // in case that cap ever changes.
+  // orderDepts caps the picker at 12, so this splits exactly 6 + 6.
   const half  = Math.ceil(departments.length / 2);
   const left  = departments.slice(0, half);
   const right = departments.slice(half);
