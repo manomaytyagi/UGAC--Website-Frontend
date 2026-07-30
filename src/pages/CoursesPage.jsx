@@ -385,7 +385,7 @@ export default function CoursesPage() {
   const left  = departments.slice(0, half);
   const right = departments.slice(half);
   const maxCol = Math.max(left.length, right.length, 6);
-  const deptDensity = Math.min(1, 6 / maxCol);
+  const deptDensity = Math.max(0.72, Math.min(1, 6 / maxCol));
 
   const openDept = (d) => { setActiveDept(d); setView("dept"); setHeroSearch(""); if (typeof window !== "undefined") window.scrollTo({ top: 0 }); };
 
@@ -420,15 +420,33 @@ export default function CoursesPage() {
       : emblemBase;
     return (
       <div style={fixed ? S.homeColFixed : { ...S.home, animation: reduce ? "none" : "rise .5s ease both" }}>
-        <div style={S.topbar}>
-          <button style={S.backBtn} onClick={() => navigate("/")}>{isDesktop ? "← Back" : "←"}</button>
-          <button style={S.linkBtn} onClick={() => navigate("/curriculum")}>View full curriculum →</button>
-        </div>
-
-        <div style={S.homeHeader}>
-          <p style={S.eyebrow}>Academic Resources</p>
-          <h1 style={S.pageH1}>Course Catalogue</h1>
-        </div>
+        {isDesktop ? (
+          /* Heading sits between the two controls so it rides at the same
+             level as "← Back" and "View full curriculum". */
+          <div style={S.topbarGrid}>
+            <div style={S.topbarSide}>
+              <button style={S.backBtn} onClick={() => navigate("/")}>← Back</button>
+            </div>
+            <div style={S.homeHeader}>
+              <p style={S.eyebrow}>Academic Resources</p>
+              <h1 style={S.pageH1}>Course Catalogue</h1>
+            </div>
+            <div style={{ ...S.topbarSide, justifyContent: "flex-end" }}>
+              <button style={S.linkBtn} onClick={() => navigate("/curriculum")}>View full curriculum →</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={S.topbar}>
+              <button style={S.backBtn} onClick={() => navigate("/")}>←</button>
+              <button style={S.linkBtn} onClick={() => navigate("/curriculum")}>View full curriculum →</button>
+            </div>
+            <div style={S.homeHeader}>
+              <p style={S.eyebrow}>Academic Resources</p>
+              <h1 style={S.pageH1}>Course Catalogue</h1>
+            </div>
+          </>
+        )}
 
         <div style={S.heroSearchWrap}>
           <input
@@ -593,9 +611,9 @@ const S = {
     position: "relative",
   },
   pageHomeFixed: {
-    height: "100dvh", overflow: "hidden", boxSizing: "border-box",
+    minHeight: "100dvh", boxSizing: "border-box",
     background: C.offWhite, color: C.ink,
-    padding: `${NAV_OFFSET}px 24px 18px`, fontFamily: "'Inter', system-ui, sans-serif",
+    padding: `${NAV_OFFSET}px 24px 28px`, fontFamily: "'Inter', system-ui, sans-serif",
     position: "relative", display: "flex", flexDirection: "column",
   },
   homeColFixed: {
@@ -605,7 +623,6 @@ const S = {
   },
   heroWrapFixed: {
     flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center",
-    overflow: "hidden",
   },
   wakeToast: {
     position: "fixed", bottom: 24, right: 24, zIndex: 200,
@@ -615,6 +632,11 @@ const S = {
   },
   home: { maxWidth: 1180, margin: "0 auto" },
   topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 16, flexShrink: 0 },
+  topbarGrid: {
+    display: "grid", gridTemplateColumns: "1fr auto 1fr",
+    alignItems: "start", gap: "0 24px", flexShrink: 0,
+  },
+  topbarSide: { display: "flex", alignItems: "center", minWidth: 0, paddingTop: 2 },
   backBtn: {
     background: C.white, border: `1px solid ${C.border}`, borderRadius: 8,
     padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600,
@@ -629,7 +651,7 @@ const S = {
   pageH1: { fontSize: "clamp(28px, 3.8vw, 46px)", fontWeight: 800, letterSpacing: -1.4, color: C.navyDeep, margin: 0, lineHeight: 1.02 },
   pageH1Sm: { fontSize: "clamp(26px, 3.6vw, 38px)", fontWeight: 800, letterSpacing: -1, color: C.navyDeep, margin: 0 },
   heroSearchWrap: {
-    position: "relative", maxWidth: 460, margin: "18px auto 0", width: "100%", flexShrink: 0,
+    position: "relative", maxWidth: 460, margin: "22px auto 0", width: "100%", flexShrink: 0,
   },
   heroSearchInput: {
     width: "100%", boxSizing: "border-box",
@@ -657,13 +679,13 @@ const S = {
   heroGrid: {
     display: "grid",
     gridTemplateColumns: "minmax(190px, 1fr) auto minmax(190px, 1fr)",
-    alignItems: "stretch", gap: "clamp(18px, 3.5vw, 52px)",
-    marginTop: 18, width: "100%", height: "100%", maxHeight: "100%",
+    alignItems: "center", gap: "clamp(18px, 3.5vw, 52px)",
+    marginTop: "clamp(30px, 4.5vh, 52px)", width: "100%",
   },
-  deptCol: { display: "flex", flexDirection: "column", gap: 10, minHeight: 0, justifyContent: "center", overflowY: "auto", maxHeight: "100%" },
+  deptCol: { display: "flex", flexDirection: "column", gap: 10, minWidth: 0, justifyContent: "center" },
   emblemWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10 },
   emblemCaption: { fontSize: 11.5, fontWeight: 600, letterSpacing: 1.4, textTransform: "uppercase", color: C.textDim, margin: 0 },
-  heroStack: { display: "flex", flexDirection: "column", alignItems: "center", gap: 26, marginTop: 24 },
+  heroStack: { display: "flex", flexDirection: "column", alignItems: "center", gap: 26, marginTop: 34 },
   deptGridMobile: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10, width: "100%" },
   deptBtn: {
     display: "flex", alignItems: "center", gap: 13,
