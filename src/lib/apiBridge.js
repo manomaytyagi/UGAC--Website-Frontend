@@ -289,106 +289,47 @@ function titleCase(s) {
 /* ===========================================================================
    4. Departments
 
-   CoursesPage renders a fixed picker of twelve departments keyed by slug
-   ("cse", "math", …) and CourseDetailPage colours its header from the display
-   name. The backend keys departments by UUID and names them however the admin
-   typed them, so every live row is resolved onto this canonical table — by
-   code first, then by a keyword in the name. Matching here is what lets live
-   names, colours and course counts reach the page instead of the static
-   sample list.
+   The backend is the only source of truth. /departments/ is passed straight
+   through: the row's UUID is the id the pages key off, its `name` and `code`
+   are shown verbatim, and a course belongs to a department only through its
+   own `department_id` column. Nothing here guesses a department from a course
+   code, a name keyword or a branch — if the admin did not set department_id
+   on a course, that course simply has no department.
+
+   The one thing the backend does not store is a colour, so each row is given
+   one from a fixed palette by its position in the list. That is presentation
+   only; it never affects which courses land under which department.
    =========================================================================== */
 
-const DEPARTMENTS = [
-  { id: "cse",  name: "Computer Science",       short: "CS", color: "#4f7cc4",
-    codes: ["CSE", "CS", "SCEE"],        keywords: ["computer"] },
-  { id: "ece",  name: "Electronics & Comm.",    short: "EC", color: "#d18a3e",
-    codes: ["ECE", "EC"],                keywords: ["electronic", "communication"] },
-  { id: "ee",   name: "Electrical Engineering", short: "EE", color: "#e0aa6b",
-    codes: ["EE", "EEE"],                keywords: ["electrical"] },
-  { id: "me",   name: "Mechanical Engineering", short: "ME", color: "#4e9b72",
-    codes: ["ME", "MECH", "SMME"],       keywords: ["mechanical"] },
-  { id: "ce",   name: "Civil Engineering",      short: "CE", color: "#c25b52",
-    codes: ["CE", "CIV", "SCENE"],       keywords: ["civil", "environmental"] },
-  { id: "dse",  name: "Data Science & Eng.",    short: "DS", color: "#2f8f86",
-    codes: ["DSE", "DS", "DSAI"],        keywords: ["data science", "artificial intelligence"] },
-  { id: "math", name: "Mathematics",            short: "MA", color: "#37548f",
-    codes: ["MA", "MTH", "MATH", "MNC", "MC", "SMSS"],
-    keywords: ["mathemat", "statistic", "computing"] },
-  { id: "phy",  name: "Physics",                short: "PH", color: "#6f7bd0",
-    codes: ["PH", "PHY", "EP", "SPS"],   keywords: ["physic"] },
-  { id: "chem", name: "Chemistry",              short: "CH", color: "#9c4a52",
-    codes: ["CH", "CY", "CHM", "CHEM", "SCS"],
-    keywords: ["chemistry", "chemical science"] },
-  { id: "bt",   name: "Biotechnology",          short: "BT", color: "#2f6e54",
-    codes: ["BT", "BIO", "BE", "SBB"],   keywords: ["bio"] },
-  { id: "mse",  name: "Materials Engineering",  short: "MT", color: "#a8682c",
-    codes: ["MSE", "MS", "MT"],          keywords: ["material"] },
-  { id: "hss",  name: "Humanities & Soc. Sci.", short: "HS", color: "#7a6cae",
-    codes: ["HSS", "HS", "SHSS"],        keywords: ["humanit", "social", "liberal"] },
+const DEPT_PALETTE = [
+  "#4f7cc4", "#d18a3e", "#e0aa6b", "#4e9b72", "#c25b52", "#2f8f86",
+  "#37548f", "#6f7bd0", "#9c4a52", "#2f6e54", "#a8682c", "#7a6cae",
 ];
-
-const DEPT_PALETTE = DEPARTMENTS.map((d) => d.color);
-
-const DEPT_BY_CODE = new Map();
-for (const dept of DEPARTMENTS) {
-  for (const code of dept.codes) {
-    if (!DEPT_BY_CODE.has(code)) DEPT_BY_CODE.set(code, dept);
-  }
-}
-
-/** Resolve an API department code or name onto the canonical table. */
-function resolveDepartment(raw) {
-  const value = clean(raw);
-  if (!value) return null;
-
-  const code = String(value).toUpperCase().replace(/[^A-Z]/g, "");
-  if (DEPT_BY_CODE.has(code)) return DEPT_BY_CODE.get(code);
-
-  const lower = String(value).toLowerCase();
-  for (const dept of DEPARTMENTS) {
-    if (dept.keywords.some((k) => lower.includes(k))) return dept;
-  }
-  return null;
-}
-
-/** "CS301" -> "cse". Used when a course row has no department_id. */
-function departmentFromCourseCode(code) {
-  const prefix = /^([A-Za-z]{2,4})/.exec(String(code || "").trim())?.[1];
-  if (!prefix) return null;
-  const upper = prefix.toUpperCase();
-  return (DEPT_BY_CODE.get(upper) || DEPT_BY_CODE.get(upper.slice(0, 2)))?.id ?? null;
-}
 
 /**
  * Fetch /departments/ once and index it both ways: a display list for the
- * picker, and UUID -> entry so course rows can be joined onto it.
+ * picker, and UUID -> entry so course rows can be joined onto it by
+ * department_id.
  */
 async function loadDepartmentIndex() {
   const rows = await getPaged("/departments/");
   const list = [];
   const byApiId = new Map();
-  const seen = new Set();
 
   rows.forEach((row, i) => {
-    const canon = resolveDepartment(row.code) || resolveDepartment(row.name);
-    const entry = canon
-      ? { id: canon.id, name: canon.name, short: canon.short, color: canon.color }
-      : {
-          id: slugKey(row.code || row.name) || `dept-${i}`,
-          name: clean(row.name) || clean(row.code) || "Department",
-          short: (clean(row.code) || initials(row.name)).slice(0, 2).toUpperCase(),
-          color: DEPT_PALETTE[i % DEPT_PALETTE.length],
-        };
-
-    entry.apiId = row.id;
-    entry.apiCode = clean(row.code);
-    entry.apiName = clean(row.name);
+    const entry = {
+      id: row.id,
+      name: clean(row.name) || clean(row.code) || "Department",
+      short: (clean(row.code) || initials(row.name) || "??").toUpperCase(),
+      color: DEPT_PALETTE[i % DEPT_PALETTE.length],
+      description: clean(row.description),
+      apiId: row.id,
+      apiCode: clean(row.code),
+      apiName: clean(row.name),
+    };
 
     byApiId.set(row.id, entry);
-    if (!seen.has(entry.id)) {
-      seen.add(entry.id);
-      list.push(entry);
-    }
+    list.push(entry);
   });
 
   return { list, byApiId };
@@ -552,17 +493,20 @@ function documentUrl(...values) {
   return null;
 }
 
+/* A course belongs to exactly the department stored on its row. No inference
+   from the course code, no branch lookup — department_id or nothing. */
 function shapeCourseSummary(row, deptIndex) {
-  const dept =
-    deptIndex?.byApiId.get(row.department_id)?.id ??
-    departmentFromCourseCode(row.code) ??
-    null;
+  const entry = row.department_id
+    ? deptIndex?.byApiId.get(row.department_id) ?? null
+    : null;
 
   return {
     id: row.id,
     code: clean(row.code) || "",
     title: clean(row.name) || "Untitled course",
-    dept,
+    dept: row.department_id ?? null,
+    dept_name: entry?.name ?? null,
+    dept_code: entry?.short ?? null,
     credits: toNumber(row.credits),
   };
 }
@@ -1252,17 +1196,15 @@ export const api = {
 
       const extra = course.extra_data || {};
 
-      /* Who the course is meant for, and the curriculum PDF. Both live in
-         extra_data today, so several spellings are read and a top-level
-         column wins if one is ever added. */
+      /* Which programs the course is meant for, and the curriculum PDF. Both
+         live in extra_data today, so several spellings are read and a
+         top-level column wins if one is ever added. Branches are deliberately
+         not derived here — a course is shown under the department stored on
+         its own row, nothing else. */
       const programs = shapeList(
         pick(course, "programs", "program") ??
           pick(extra, "programs", "program", "intended_programs", "degrees", "degree")
       );
-      const branches = shapeList(
-        pick(course, "branches", "branch") ??
-          pick(extra, "branches", "branch", "intended_branches", "eligible_branches")
-      ).map((value) => branchMeta(value));
 
       const curriculumUrl = documentUrl(
         pick(course, "curriculum_url", "curriculum_key"),
@@ -1270,11 +1212,18 @@ export const api = {
         pick(course, "syllabus_url")
       );
 
+      const deptEntry = course.department_id
+        ? deptIndex?.byApiId.get(course.department_id) ?? null
+        : null;
+
       return {
         id: course.id,
         code: clean(course.code) || "",
         title: clean(course.name) || "Untitled course",
-        dept: deptIndex?.byApiId.get(course.department_id)?.name ?? null,
+        dept: deptEntry?.name ?? null,
+        dept_id: course.department_id ?? null,
+        dept_code: deptEntry?.short ?? null,
+        dept_color: deptEntry?.color ?? null,
         credits: toNumber(course.credits),
         lecture_hours: course.lecture_hours ?? null,
         tutorial_hours: course.tutorial_hours ?? null,
@@ -1287,7 +1236,6 @@ export const api = {
         curriculum_title:
           pick(extra, "curriculum_title", "curriculum_label") || null,
         programs,
-        branches,
         prerequisites,
         reviews: (Array.isArray(reviews) ? reviews : [])
           .filter((r) => !r.status || r.status === "approved")

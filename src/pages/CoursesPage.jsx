@@ -12,6 +12,10 @@ function tint(hex, a) {
 
 const NAV_OFFSET = 92;
 
+// The picker shows exactly the departments the backend returns from
+// /departments/ — no curated list, no name/code matching. The array below is
+// only used when the API is unreachable, and its ids are the ones the
+// fallback courses below reference.
 const FALLBACK_DEPARTMENTS = [
   // left column
   { id: "cse",  name: "Computer Science",        short: "CS", color: "#4f7cc4" },
@@ -28,37 +32,6 @@ const FALLBACK_DEPARTMENTS = [
   { id: "mse",  name: "Materials Engineering",   short: "MT", color: "#a8682c" },
   { id: "hss",  name: "Humanities & Soc. Sci.",  short: "HS", color: "#7a6cae" },
 ];
-
-const DEPT_META = Object.fromEntries(FALLBACK_DEPARTMENTS.map(d => [d.id, d]));
-const DEPT_PALETTE = FALLBACK_DEPARTMENTS.map(d => d.color);
-
-function decorateDepts(list) {
-  return list.map((d, i) => {
-    const meta = DEPT_META[d.id] || {};
-    return {
-      ...d,
-      short: d.short || meta.short || d.code || d.name.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase(),
-      color: d.color || meta.color || DEPT_PALETTE[i % DEPT_PALETTE.length],
-    };
-  });
-}
-
-// The live API can return extra, loosely-defined rows (research centres,
-// exchange programs, "Institute Core", etc.) that aren't proper departments
-// yet. Until that data is cleaned up, the home picker only shows the 12
-// curated departments (6 + 6) defined in FALLBACK_DEPARTMENTS, matched by
-// id/name/short so we still use live names/colors/counts where available.
-function curatedOnly(depts) {
-  const byKey = {};
-  depts.forEach(d => {
-    [d.id, d.name, d.short].forEach(k => {
-      if (k) byKey[String(k).toLowerCase()] = d;
-    });
-  });
-  return FALLBACK_DEPARTMENTS
-    .map(canon => byKey[canon.id] || byKey[canon.name.toLowerCase()] || byKey[(canon.short || "").toLowerCase()] || canon)
-    .slice(0, 12);
-}
 
 function mk(prefix, dept, rows) {
   return rows.map(([lvl, ser, title, credits, prac]) => ({
@@ -186,60 +159,6 @@ function parseCode(code) {
 function withMeta(c) {
   const p = parseCode(c.code);
   return { ...c, level: c.level ?? p.level, practical: c.practical ?? p.practical };
-}
-
-function deptPrefix(dep) {
-  const base = (dep.short || dep.name || "").replace(/[^A-Za-z]/g, "");
-  return (base.slice(0, 2) || "XX").toUpperCase();
-}
-function codePrefix(code) {
-  const m = /^([A-Za-z]{2,4})/.exec((code || "").trim());
-  return m ? m[1] : "";
-}
-
-function resolveCourseDept(course, depts) {
-  const raw = (course.dept ?? "").toString().trim().toLowerCase();
-  if (raw) {
-    for (const dep of depts) {
-      if (raw === String(dep.id).toLowerCase()
-        || raw === String(dep.name).toLowerCase()
-        || raw === String(dep.short || "").toLowerCase()) return dep.id;
-    }
-  }
-  const pre = codePrefix(course.code).toLowerCase();
-  if (pre) {
-    for (const dep of depts) {
-      if (String(dep.short || "").toLowerCase() === pre || deptPrefix(dep).toLowerCase() === pre) return dep.id;
-    }
-  }
-  return course.dept;
-}
-
-function buildPlaceholderCourses(depts) {
-  const TEMPLATE = [
-    [1, "Foundations", 4, false],
-    [1, "Laboratory", 2, true],
-    [2, "Core Principles", 3, false],
-    [3, "Methods & Analysis", 4, false],
-    [3, "Applied Laboratory", 2, true],
-    [4, "Advanced Topics", 3, false],
-    [5, "Special Elective", 3, false],
-    [6, "Capstone Seminar", 3, false],
-  ];
-  const out = [];
-  depts.forEach(dep => {
-    const prefix = deptPrefix(dep);
-    TEMPLATE.forEach(([lvl, label, credits, prac], i) => {
-      out.push({
-        id: `ph-${dep.id}-${i + 1}`,
-        code: `${prefix}${lvl}${String(i + 1).padStart(2, "0")}${prac ? "P" : ""}`,
-        title: `${dep.name} ${label}`,
-        dept: dep.id,
-        credits,
-      });
-    });
-  });
-  return out;
 }
 
 const FLAME_PATH = "M202.282 182.635C201.935 183.082 201.802 183.609 201.8 183.844C201.8 185.258 201.802 186.571 201.817 187.326C201.834 188.186 201.867 188.318 201.884 188.911C201.934 191.686 202.056 192.281 202.084 193.022C202.134 194.386 202.079 194.958 202.334 195.702C202.534 196.286 202.728 196.797 202.884 197.352C203.034 197.886 203.167 198.418 203.3 198.951L203.301 198.952C203.434 199.486 203.606 200.01 203.701 200.552C203.8 201.12 204.025 201.684 204.184 202.252C204.334 202.786 204.592 203.295 204.784 203.852C204.968 204.386 205.248 204.912 205.484 205.452C205.702 205.952 206.045 206.372 206.285 206.868C206.534 207.386 206.84 207.83 207.118 208.386C207.502 209.154 207.846 209.856 208.218 210.335C208.568 210.786 209.039 211.382 209.519 211.952C209.968 212.486 210.297 212.954 210.702 213.452C211.136 213.986 211.526 214.509 211.918 214.935C212.302 215.352 212.753 215.834 213.219 216.251C213.702 216.686 214.102 217.149 214.636 217.468C215.336 217.886 215.853 218.243 216.402 218.534C216.936 218.818 217.38 219.19 217.902 219.451C218.436 219.718 218.922 219.995 219.419 220.234C219.936 220.484 220.436 220.746 221.002 220.817C221.536 220.884 222.088 220.959 222.602 221.167C223.136 221.384 224.269 221.523 225.816 221.533C228.182 221.55 229.834 221.638 230.408 221.633C232.436 221.616 233.321 221.646 234.103 221.449C234.77 221.282 235.362 221.05 235.986 220.949C236.604 220.85 237.286 220.836 237.802 220.632C238.438 220.382 239.297 220.037 240.17 219.665C240.836 219.382 241.312 219.029 241.902 218.899C242.436 218.782 242.825 218.296 243.419 217.848C244.036 217.382 244.56 217.039 245.186 216.565C245.736 216.148 246.349 215.496 246.919 214.965C247.402 214.514 248.028 214.102 248.518 213.281C248.836 212.748 249.201 212.172 250.22 211.347C250.836 210.848 251.319 210.444 251.752 209.764C252.102 209.214 252.493 208.744 252.818 208.248C253.168 207.714 253.446 207.144 253.818 206.665C254.168 206.214 254.491 205.711 254.785 205.064C255.034 204.514 255.262 203.995 255.501 203.448C255.734 202.914 255.836 202.373 256.001 201.848C256.168 201.314 256.491 200.811 256.785 200.164C257.034 199.614 257.244 199.096 257.318 198.447C257.5 196.828 257.6 194.364 257.383 193.096C257.266 192.414 257.238 191.868 257.083 191.097C256.966 190.514 256.911 189.244 256.817 188.28C256.732 187.414 256.57 186.55 256.517 185.814C256.466 185.114 256.341 184.513 256.2 183.948L255.8 182.348C255.666 181.814 255.547 181.263 255.366 180.664C255.2 180.114 255.122 179.559 254.883 179.048C254.632 178.514 254.346 177.697 254.083 177.048C253.866 176.514 253.679 175.976 253.399 175.448C253.098 174.88 252.845 174.245 252.566 173.748L252.52 173.666C252.236 173.161 251.955 172.659 251.616 171.981C251.332 171.414 251.058 170.887 250.716 170.348C250.403 169.855 250.167 169.383 249.91 168.87L249.899 168.848C249.632 168.314 249.355 167.777 248.882 167.465C248.398 167.148 247.7 166.847 247.132 166.181C246.732 165.714 246.416 165.169 245.999 164.648C245.598 164.148 245.148 163.57 244.916 162.948C244.866 162.814 244.833 162.682 244.817 162.905C244.8 163.128 244.818 163.69 244.783 164.037C244.7 164.854 244.641 165.587 244.5 166.152C244.366 166.686 244.243 167.22 244.117 167.752C243.998 168.252 243.799 168.718 243.516 169.252C243.232 169.786 242.962 170.573 242.298 170.751C241.186 171.05 239.491 171.132 238.998 170.916C238.464 170.682 237.976 170.29 237.482 169.965C236.998 169.648 236.565 169.158 236.182 168.665C235.832 168.214 235.473 167.696 235.199 167.148C234.932 166.614 234.68 166.092 234.6 165.548C234.5 164.878 234.552 164.068 234.383 163.13C234.266 162.48 234.223 161.61 234.1 160.948C234 160.414 233.801 159.906 233.733 159.145C233.632 158.014 233.567 157.323 233.316 156.748C233.098 156.248 232.807 155.759 232.499 155.248C232.198 154.748 231.866 154.282 231.599 153.748C231.332 153.214 231.07 152.68 230.699 152.064C230.366 151.514 230.111 150.933 229.766 150.465C229.432 150.014 229.142 149.501 228.682 149.131C228.164 148.716 227.675 148.338 227.064 148.283C226.698 148.25 226.333 148.282 226.132 148.485C226.032 148.586 225.945 148.712 225.916 148.852C225.8 149.42 225.797 150.04 225.583 150.569C225.332 151.186 225.104 151.707 224.916 152.252C224.732 152.786 224.495 153.329 224.283 153.852C224.066 154.386 223.907 154.94 223.599 155.452C223.298 155.952 222.913 156.431 222.165 157.202C221.664 157.718 221.233 158.089 220.698 158.535C220.198 158.952 219.714 159.401 219.299 159.851C218.898 160.286 218.469 160.723 218.082 161.168C217.632 161.686 217.335 162.183 216.882 162.652C216.398 163.152 215.978 163.674 215.482 164.034C214.998 164.386 214.487 164.798 214.015 165.251C213.598 165.652 213.1 165.95 212.699 166.351C212.298 166.752 211.754 166.994 211.315 167.451C210.898 167.886 210.44 168.374 210.116 168.868C209.798 169.352 209.429 169.791 209.116 170.268C208.798 170.752 208.498 171.195 208.199 171.685C207.832 172.286 207.552 172.812 207.316 173.352C207.098 173.852 206.766 174.318 206.499 174.852C206.232 175.386 205.958 175.913 205.616 176.452C205.298 176.952 204.966 177.418 204.699 177.952C204.432 178.486 204.268 179.068 203.966 179.552C203.632 180.086 203.352 180.612 203.116 181.152C202.898 181.652 202.644 182.169 202.282 182.635Z";
@@ -426,23 +345,23 @@ export default function CoursesPage() {
       clearTimeout(wakeTimer);
       setApiWaking(false);
 
-      const depts = curatedOnly(decorateDepts(deptRes.data));
+      // The two calls fall back independently, and the sample ids only line
+      // up with each other — so if either one is sample data, use both.
+      const stale = deptRes.source === "fallback" || courseRes.source === "fallback";
+      const depts = stale ? FALLBACK_DEPARTMENTS : (deptRes.data || []);
+      const rawCourses = stale ? FALLBACK_COURSES : (courseRes.data || []);
+
+      // A course sits under the department its own row names (department_id),
+      // and nowhere else. Courses with no department are simply not listed
+      // under any of them.
       const deptIds = new Set(depts.map(d => d.id));
-
-      const liveCourses = (courseRes.data || [])
-        .map(c => withMeta({ ...c, dept: resolveCourseDept(c, depts) }));
-      const joinable = liveCourses.filter(c => deptIds.has(c.dept));
-
-      let finalCourses = joinable;
-      let synthesized = false;
-      if (joinable.length === 0) {
-        finalCourses = buildPlaceholderCourses(depts).map(withMeta);
-        synthesized = true;
-      }
+      const finalCourses = rawCourses
+        .filter(c => c.dept != null && deptIds.has(c.dept))
+        .map(withMeta);
 
       setDepartments(depts);
       setCourses(finalCourses);
-      setUsingFallback(deptRes.source === "fallback" || courseRes.source === "fallback" || synthesized);
+      setUsingFallback(stale);
       setLoading(false);
     };
     load();
@@ -459,9 +378,9 @@ export default function CoursesPage() {
     return m;
   }, [courses]);
 
-  // departments is capped at 12 (6+6) by curatedOnly, so this split is
-  // normally exactly even; the density scaling below is just a safety net
-  // in case that cap ever changes.
+  // The backend holds twelve departments, so this split is normally an even
+  // 6 + 6; the density scaling below just keeps the columns from overflowing
+  // if that count ever changes.
   const half  = Math.ceil(departments.length / 2);
   const left  = departments.slice(0, half);
   const right = departments.slice(half);

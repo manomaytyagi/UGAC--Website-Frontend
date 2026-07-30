@@ -12,21 +12,8 @@ function tint(hex, a) {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-const DEPT_COLOR = {
-  "Computer Science": "#4f7cc4",
-  "Electronics & Comm.": "#d18a3e",
-  "Electrical Engineering": "#e0aa6b",
-  "Mechanical Engineering": "#4e9b72",
-  "Civil Engineering": "#c25b52",
-  "Data Science & Eng.": "#2f8f86",
-  "Mathematics": "#37548f",
-  "Physics": "#6f7bd0",
-  "Chemistry": "#9c4a52",
-  "Biotechnology": "#2f6e54",
-  "Materials Engineering": "#a8682c",
-  "Humanities & Soc. Sci.": "#7a6cae",
-};
-const accentFor = (dept) => DEPT_COLOR[dept] || C.orange;
+/* The department — and its colour — come from the course row itself, so no
+   name-to-colour table is kept here. */
 
 function parseCode(code) {
   const s = (code || "").trim();
@@ -55,13 +42,6 @@ function normalizePrereqs(list) {
   });
 }
 
-/* Branches arrive as { code, name, color } from the bridge, or as bare codes. */
-function normalizeBranches(list) {
-  return (list || []).map((b) =>
-    typeof b === "string" ? { code: b, name: b, color: null } : b
-  ).filter((b) => b && (b.code || b.name));
-}
-
 /* Minimal skeleton block used during loading. Kept local to avoid adding a new file. */
 function SkeletonBlock({ width = "100%", height = 12, mb = 8 }) {
   const h = typeof height === "number" ? `${height}px` : height;
@@ -73,14 +53,14 @@ function SkeletonBlock({ width = "100%", height = 12, mb = 8 }) {
 
 const FALLBACK_COURSE = {
   id: 1, code: "CS301", title: "Data Structures & Algorithms",
-  dept: "Computer Science and Engineering", credits: 4,
+  dept: "Computer Science and Engineering", dept_code: "CSE", dept_color: "#4f7cc4",
+  credits: 4,
   lecture_hours: 3, tutorial_hours: 1, practical_hours: 0,
   description: "Covers fundamental data structures (arrays, linked lists, trees, graphs, hash tables) and algorithmic paradigms including sorting, searching, dynamic programming, and greedy algorithms. Emphasis on analysing time and space complexity and on choosing the right structure for a given problem.",
   syllabus_url: null,
   curriculum_url: null,
   curriculum_title: null,
   programs: ["B.Tech.", "B.Tech. (Honours)"],
-  branches: ["CSE", "DSE"],
   prerequisites: [
     { id: 2, code: "CS101", title: "Introduction to Programming" },
     { id: 3, code: "CS201", title: "Discrete Mathematics" },
@@ -113,11 +93,10 @@ export default function CourseDetailPage() {
     return () => clearTimeout(wakeTimer);
   }, [courseId]);
 
-  const accent = course ? accentFor(course.dept) : C.orange;
+  const accent = course?.dept_color || C.orange;
   const meta = course ? parseCode(course.code) : { level: null, practical: false };
   const prereqs = normalizePrereqs(course?.prerequisites);
   const programs = course?.programs || [];
-  const branches = normalizeBranches(course?.branches);
   const curriculumUrl = course?.curriculum_url || course?.syllabus_url || null;
   const ltp = course
     ? [["L", course.lecture_hours], ["T", course.tutorial_hours], ["P", course.practical_hours]]
@@ -150,7 +129,9 @@ export default function CourseDetailPage() {
 
             <div style={S.headerRow}>
               <div style={{ minWidth: 0 }}>
-                <p style={{ ...S.eyebrow, color: accent }}>{course.code} · {course.dept}</p>
+                <p style={{ ...S.eyebrow, color: accent }}>
+                  {course.code}{course.dept ? ` · ${course.dept}` : ""}
+                </p>
                 <h1 style={S.h1}>{course.title}</h1>
                 <div style={S.chips}>
                   <span style={S.chip}>{course.credits} credits</span>
@@ -166,35 +147,17 @@ export default function CourseDetailPage() {
               </div>
             </div>
 
-            {(programs.length > 0 || branches.length > 0) && (
+            {programs.length > 0 && (
               <section style={S.section}>
                 <h2 style={S.sectionH2}>Intended for</h2>
-                {programs.length > 0 && (
-                  <div style={S.metaBlock}>
-                    <span style={S.metaLabel}>Programs</span>
-                    <div style={S.pillList}>
-                      {programs.map(pr => (
-                        <span key={pr} style={S.progPill}>{pr}</span>
-                      ))}
-                    </div>
+                <div style={S.metaBlock}>
+                  <span style={S.metaLabel}>Programs</span>
+                  <div style={S.pillList}>
+                    {programs.map(pr => (
+                      <span key={pr} style={S.progPill}>{pr}</span>
+                    ))}
                   </div>
-                )}
-                {branches.length > 0 && (
-                  <div style={S.metaBlock}>
-                    <span style={S.metaLabel}>Branches</span>
-                    <div style={S.pillList}>
-                      {branches.map(b => (
-                        <span key={b.code || b.name} style={S.branchPill}>
-                          <span style={{ ...S.branchDot, background: b.color || accent }} />
-                          {b.name || b.code}
-                          {b.code && b.name && b.name !== b.code && (
-                            <span style={S.branchCode}>{b.code}</span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                </div>
               </section>
             )}
 
@@ -340,14 +303,6 @@ const S = {
     background: C.white, border: `1px solid ${C.border}`, borderRadius: 20,
     padding: "7px 15px", fontSize: 13, fontWeight: 700, color: C.navyMid,
   },
-  branchPill: {
-    display: "inline-flex", alignItems: "center", gap: 9,
-    background: C.white, border: `1px solid ${C.border}`, borderRadius: 20,
-    padding: "7px 15px", fontSize: 13, fontWeight: 600, color: C.navyMid,
-  },
-  branchDot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
-  branchCode: { fontSize: 11, fontWeight: 800, letterSpacing: 0.8, color: C.textDim },
-
   docCard: {
     display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap",
     background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
