@@ -223,7 +223,7 @@ body.menu-open { overflow: hidden; }
 .spot__cta:hover .arw { transform: translateX(3px); }
 
 /* ============ SECTION SCAFFOLD ============ */
-.section { padding: 45px 0; }
+.section { padding: 15px 0; }
 /* Two edges keep the original 96px breathing room: the top of the register
    and the bottom of the community section. */
 #register { padding-top: 96px; }
@@ -309,6 +309,30 @@ body.menu-open { overflow: hidden; }
   padding: 16px 8px;
   text-align: left;
 }
+
+.notif-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.notif-error .notif-empty { margin: 0; }
+
+.notif-retry {
+  border: 1px solid var(--c-blue);
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: transparent;
+  color: var(--c-blue);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notif-retry:hover { background: color-mix(in srgb, var(--c-blue) 10%, transparent); }
 
 @keyframes hpPulse {
   0%, 100% { opacity: 1; }

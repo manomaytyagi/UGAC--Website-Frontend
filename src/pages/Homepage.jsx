@@ -49,8 +49,8 @@ const REGISTER = [
     desc: "B.Tech. structures for every branch and batch, with prerequisite maps you can trace." },
   { code: "04", title: "Resources", to: "/resources", acc: "var(--c-gold)",
     desc: "Regulations, the academic calendar, forms, useful links and step-by-step procedures." },
-  { code: "05", title: "Community", to: "/community/important-contacts", acc: "var(--c-navy)",
-    desc: "Feedback, important contacts and faculty advisers for every branch and year." },
+  { code: "05", title: "Faculty Contacts", to: "/faculty-contacts/deans-and-schools", acc: "var(--c-navy)",
+    desc: "Feedback, important contacts and faculty advisors for every branch and year." },
 ];
 
 const DOCS_FALLBACK = [
@@ -89,12 +89,12 @@ function ResItem({ item }) {
   );
 }
 const COMMUNITY = [
-  { code: "01", title: "Feedback", to: "/community/feedback", acc: "var(--c-blue)",
+  { code: "01", title: "Feedback", to: "/faculty-contacts/feedback", acc: "var(--c-blue)",
     desc: "Share academic concerns, suggestions and issues directly with the council.", cta: "Open the form" },
-  { code: "02", title: "Important Contacts", to: "/community/important-contacts", acc: "var(--c-green)",
+  { code: "02", title: "Deans & Schools", to: "/faculty-contacts/deans-and-schools", acc: "var(--c-green)",
     desc: "The council team, courses team and department chairs, all in one place.", cta: "View contacts" },
-  { code: "03", title: "Faculty Advisers", to: "/community/faculty-advisers", acc: "var(--c-gold)",
-    desc: "Advisers for every branch and year, with direct email and profile links.", cta: "Find your adviser" },
+  { code: "03", title: "Faculty Advisors", to: "/faculty-contacts/faculty-advisers", acc: "var(--c-gold)",
+    desc: "Advisors for every branch and year, with direct email and profile links.", cta: "Find your advisor" },
 ];
 
 function useReveal() {
@@ -131,6 +131,8 @@ export default function Homepage() {
 
   // ---- Live data (announcements / events / resources) fetched from API ----
   const [notifications, setNotifications] = useState([]);
+  const [announcementsFailed, setAnnouncementsFailed] = useState(false);
+  const [announcementsRefresh, setAnnouncementsRefresh] = useState(0);
   const [upcoming, setUpcoming] = useState([]);            // event spotlight source
   const [docs, setDocs] = useState(DOCS_FALLBACK);         // Forms & documents
   const [links, setLinks] = useState(LINKS_FALLBACK);      // Portals & external
@@ -139,6 +141,8 @@ export default function Homepage() {
 
   useEffect(() => {
     let alive = true;
+    setLoading(true);
+    setAnnouncementsFailed(false);
     (async () => {
       try {
         const [ann, ev, docsRes, formsRes, linksRes] = await Promise.all([
@@ -152,6 +156,7 @@ export default function Homepage() {
 
         const mapped = (ann.data || []).map(mapAnnouncement);
         setNotifications(mapped);
+        setAnnouncementsFailed(ann.source === "fallback");
 
         setUpcoming((ev.data && ev.data.upcoming) || []);
 
@@ -160,13 +165,14 @@ export default function Homepage() {
 
         if (linksRes.data && linksRes.data.length) setLinks(linksRes.data);
       } catch {
-        /* keep existing fallback data */
+        // A failed notice request must never look like a genuine empty board.
+        if (alive) setAnnouncementsFailed(true);
       } finally {
         if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [announcementsRefresh]);
 
   // Event spotlight: nearest event inside the 7-day horizon, or none.
   const horizonEvent = useMemo(() => {
@@ -270,6 +276,17 @@ export default function Homepage() {
                   </div>
                 ))}
               </div>
+            ) : announcementsFailed ? (
+              <div className="notif-list notif-error reveal">
+                <p className="notif-empty">Announcements are temporarily unavailable.</p>
+                <button
+                  className="notif-retry"
+                  type="button"
+                  onClick={() => setAnnouncementsRefresh((value) => value + 1)}
+                >
+                  Try again
+                </button>
+              </div>
             ) : notifications.length === 0 ? (
               <div className="notif-list reveal" style={{ padding: "18px 20px" }}>
                 <p className="notif-empty" style={{ margin: 0 }}>No announcements posted yet.</p>
@@ -354,7 +371,7 @@ export default function Homepage() {
           <div className="wrap">
             <div className="sec-head reveal">
               <div>
-               <h2>Community</h2>
+               <h2>Faculty Contacts</h2>
               </div>
            </div>
             <div className="comm-grid">
@@ -386,12 +403,12 @@ export default function Homepage() {
             </div>
           </div>
           <div>
-            <h4>Community</h4>
+            <h4>Faculty Contacts</h4>
             <div className="foot__links">
-              <Link to="/community/feedback">Feedback</Link>
-              <Link to="/community/important-contacts">Important Contacts</Link>
-              <Link to="/community/faculty-advisers">Faculty Advisers</Link>
-              <a href="mailto:acad.secy@iitmandi.ac.in">acad.secy@iitmandi.ac.in</a>
+              <Link to="/faculty-contacts/feedback">Feedback</Link>
+              <Link to="/faculty-contacts/deans-and-schools">Deans & Schools</Link>
+              <Link to="/faculty-contacts/faculty-advisers">Faculty Advisors</Link>
+              <a href="mailto:academic_secretary@iitmandi.ac.in">academic_secretary@iitmandi.ac.in</a>
             </div>
           </div>
         </div>

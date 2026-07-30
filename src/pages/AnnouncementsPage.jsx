@@ -148,20 +148,30 @@ export default function AnnouncementsPage() {
   const navigate = useNavigate();
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("all");
   const [openItem, setOpenItem] = useState(null);
 
   useEffect(() => {
     let alive = true;
+    setLoading(true);
+    setLoadFailed(false);
     (async () => {
       const res = await apiFetch("/api/v1/announcements", []);
       if (!alive) return;
       setAnnouncements(Array.isArray(res.data) ? res.data : []);
+      setLoadFailed(res.source === "fallback");
       setLoading(false);
-    })();
+    })().catch(() => {
+      if (!alive) return;
+      setAnnouncements([]);
+      setLoadFailed(true);
+      setLoading(false);
+    });
     return () => { alive = false; };
-  }, []);
+  }, [reloadVersion]);
 
   // Category chips derived from the data, with counts.
   const categories = useMemo(() => {
@@ -249,6 +259,21 @@ export default function AnnouncementsPage() {
                 <div className="ann-skeleton__line" style={{ width: "70%", height: 11 }} />
               </div>
             ))}
+          </div>
+        ) : loadFailed ? (
+          <div className="ann-empty">
+            <p className="ann-empty__icon">!</p>
+            <h3 className="ann-empty__title">Announcements are temporarily unavailable</h3>
+            <p className="ann-empty__text">
+              Please try again in a moment. We have not treated this as an empty notice board.
+            </p>
+            <button
+              className="ann-empty__btn"
+              type="button"
+              onClick={() => setReloadVersion((value) => value + 1)}
+            >
+              Try again
+            </button>
           </div>
         ) : filtered.length === 0 ? (
           <div className="ann-empty">

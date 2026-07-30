@@ -12,30 +12,22 @@ function tint(hex, a) {
 
 const NAV_OFFSET = 92;
 
-// The twelve departments the backend actually has, in render order:
-// the first six fill the left column, the last six the right.
-// `id` matches the id apiBridge assigns (the department code, lowercased),
-// so live names, colours and counts land on the right tile.
 const FALLBACK_DEPARTMENTS = [
   // left column
-  { id: "scee",  code: "SCEE",  name: "School of Computer and Electrical Engineering", short: "SCEE",  color: "#4f7cc4" },
-  { id: "scene", code: "SCENE", name: "School of Civil and Environmental Engineering", short: "SCENE", color: "#c25b52" },
-  { id: "scs",   code: "SCS",   name: "School of Chemical Sciences",                   short: "SCS",   color: "#9c4a52" },
-  { id: "shss",  code: "SHSS",  name: "School of Humanities and Social Sciences",      short: "SHSS",  color: "#7a6cae" },
-  { id: "smme",  code: "SMME",  name: "School of Mechanical and Materials Engineering", short: "SMME", color: "#4e9b72" },
-  { id: "smss",  code: "SMSS",  name: "School of Mathematics and Statistical Sciences", short: "SMSS", color: "#37548f" },
+  { id: "cse",  name: "Computer Science",        short: "CS", color: "#4f7cc4" },
+  { id: "ece",  name: "Electronics & Comm.",     short: "EC", color: "#d18a3e" },
+  { id: "ee",   name: "Electrical Engineering",  short: "EE", color: "#e0aa6b" },
+  { id: "me",   name: "Mechanical Engineering",  short: "ME", color: "#4e9b72" },
+  { id: "ce",   name: "Civil Engineering",       short: "CE", color: "#c25b52" },
+  { id: "dse",  name: "Data Science & Eng.",     short: "DS", color: "#2f8f86" },
   // right column
-  { id: "sps",   code: "SPS",   name: "School of Physical Sciences",                   short: "SPS",   color: "#6f7bd0" },
-  { id: "sbb",   code: "SBB",   name: "School of Biosciences and Bioengineering",      short: "SBB",   color: "#2f6e54" },
-  { id: "som",   code: "SOM",   name: "School of Management",                          short: "SOM",   color: "#5c7a99" },
-  { id: "cair",  code: "CAIR",  name: "Centre for Artificial Intelligence and Robotics", short: "CAIR", color: "#3f7d8c" },
-  { id: "cqst",  code: "CQST",  name: "Centre for Quantum Science and Technology",     short: "CQST",  color: "#b03a42" },
-  { id: "iks",   code: "IKS",   name: "IKSMHA",                                        short: "IKS",   color: "#8a6d3b" },
+  { id: "math", name: "Mathematics",             short: "MA", color: "#37548f" },
+  { id: "phy",  name: "Physics",                 short: "PH", color: "#6f7bd0" },
+  { id: "chem", name: "Chemistry",               short: "CH", color: "#9c4a52" },
+  { id: "bt",   name: "Biotechnology",           short: "BT", color: "#2f6e54" },
+  { id: "mse",  name: "Materials Engineering",   short: "MT", color: "#a8682c" },
+  { id: "hss",  name: "Humanities & Soc. Sci.",  short: "HS", color: "#7a6cae" },
 ];
-
-// Render order for whatever the API returns. Anything not listed here is
-// appended, so a new department shows up without a code change.
-const DEPT_ORDER = FALLBACK_DEPARTMENTS.map(d => d.id);
 
 const DEPT_META = Object.fromEntries(FALLBACK_DEPARTMENTS.map(d => [d.id, d]));
 const DEPT_PALETTE = FALLBACK_DEPARTMENTS.map(d => d.color);
@@ -51,15 +43,21 @@ function decorateDepts(list) {
   });
 }
 
-// Order the live departments for display and cap the picker at twelve
-// (six per column). Every row the API returns is a real department, so
-// nothing is filtered out by name — only ordered.
-function orderDepts(depts) {
-  const rank = (d) => {
-    const i = DEPT_ORDER.indexOf(String(d.id).toLowerCase());
-    return i === -1 ? DEPT_ORDER.length : i;
-  };
-  return [...depts].sort((a, b) => rank(a) - rank(b)).slice(0, 12);
+// The live API can return extra, loosely-defined rows (research centres,
+// exchange programs, "Institute Core", etc.) that aren't proper departments
+// yet. Until that data is cleaned up, the home picker only shows the 12
+// curated departments (6 + 6) defined in FALLBACK_DEPARTMENTS, matched by
+// id/name/short so we still use live names/colors/counts where available.
+function curatedOnly(depts) {
+  const byKey = {};
+  depts.forEach(d => {
+    [d.id, d.name, d.short].forEach(k => {
+      if (k) byKey[String(k).toLowerCase()] = d;
+    });
+  });
+  return FALLBACK_DEPARTMENTS
+    .map(canon => byKey[canon.id] || byKey[canon.name.toLowerCase()] || byKey[(canon.short || "").toLowerCase()] || canon)
+    .slice(0, 12);
 }
 
 function mk(prefix, dept, rows) {
@@ -191,22 +189,30 @@ function withMeta(c) {
 }
 
 function deptPrefix(dep) {
-  const base = (dep.code || dep.short || dep.name || "").replace(/[^A-Za-z]/g, "");
-  return (base.slice(0, 4) || "XX").toUpperCase();
+  const base = (dep.short || dep.name || "").replace(/[^A-Za-z]/g, "");
+  return (base.slice(0, 2) || "XX").toUpperCase();
 }
 function codePrefix(code) {
   const m = /^([A-Za-z]{2,4})/.exec((code || "").trim());
   return m ? m[1] : "";
 }
 
-// apiBridge already assigns every course to a department (by department_id,
-// falling back to the course-code prefix), so the page does not second-guess
-// it — it only checks the id is one we are rendering. A course whose
-// department could not be determined stays out of the picker rather than
-// being guessed into the wrong tile.
 function resolveCourseDept(course, depts) {
-  const raw = String(course.dept ?? "").trim().toLowerCase();
-  return depts.some(d => String(d.id).toLowerCase() === raw) ? raw : null;
+  const raw = (course.dept ?? "").toString().trim().toLowerCase();
+  if (raw) {
+    for (const dep of depts) {
+      if (raw === String(dep.id).toLowerCase()
+        || raw === String(dep.name).toLowerCase()
+        || raw === String(dep.short || "").toLowerCase()) return dep.id;
+    }
+  }
+  const pre = codePrefix(course.code).toLowerCase();
+  if (pre) {
+    for (const dep of depts) {
+      if (String(dep.short || "").toLowerCase() === pre || deptPrefix(dep).toLowerCase() === pre) return dep.id;
+    }
+  }
+  return course.dept;
 }
 
 function buildPlaceholderCourses(depts) {
@@ -286,7 +292,7 @@ function BookFlameEmblem({ size = 300, reduce }) {
   );
 }
 
-function DeptButton({ dept, side, count, onPick, density = 1, compact = false }) {
+function DeptButton({ dept, side, count, onPick, density = 1 }) {
   const [hot, setHot] = useState(false);
   const left = side === "left";
   return (
@@ -301,7 +307,7 @@ function DeptButton({ dept, side, count, onPick, density = 1, compact = false })
       style={{
         ...S.deptBtn,
         gap: 13 * density,
-        padding: `${(compact ? 9 : 11) * density}px ${14 * density}px`,
+        padding: `${12 * density}px ${15 * density}px`,
         flexDirection: left ? "row-reverse" : "row",
         textAlign: left ? "right" : "left",
         borderColor: hot ? dept.color : C.border,
@@ -309,9 +315,9 @@ function DeptButton({ dept, side, count, onPick, density = 1, compact = false })
         transform: hot ? (left ? "translateX(-4px)" : "translateX(4px)") : "none",
       }}
     >
-      <span style={{ ...S.deptAccent, width: 4, height: (compact ? 26 : 30) * density, background: dept.color }} />
+      <span style={{ ...S.deptAccent, width: 4, height: 32 * density, background: dept.color }} />
       <span style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: left ? "flex-end" : "flex-start", minWidth: 0 }}>
-        <span style={{ ...S.deptName, fontSize: 14.5 * density }}>{dept.name}</span>
+        <span style={{ ...S.deptName, fontSize: 15 * density }}>{dept.name}</span>
         <span style={{ ...S.deptMeta, fontSize: 11.5 * density }}>{dept.short} · {count} course{count === 1 ? "" : "s"}</span>
       </span>
     </button>
@@ -388,14 +394,6 @@ function useMedia(query) {
 export default function CoursesPage() {
   const navigate = useNavigate();
   const isDesktop = useMedia("(min-width: 900px)");
-  // The full-viewport home only works if six tiles actually fit. On a short
-  // window it falls back to a normal scrolling page rather than clipping the
-  // bottom of a column.
-  const isTall = useMedia("(min-height: 640px)");
-  // Below this the header stack (topbar + title + search) leaves too little
-  // room for six tiles, so the whole hero tightens up rather than pushing the
-  // bottom row off screen.
-  const compact = useMedia("(max-height: 900px)");
   const reduce = useMedia("(prefers-reduced-motion: reduce)");
 
   const [departments, setDepartments] = useState([]);
@@ -428,7 +426,7 @@ export default function CoursesPage() {
       clearTimeout(wakeTimer);
       setApiWaking(false);
 
-      const depts = orderDepts(decorateDepts(deptRes.data));
+      const depts = curatedOnly(decorateDepts(deptRes.data));
       const deptIds = new Set(depts.map(d => d.id));
 
       const liveCourses = (courseRes.data || [])
@@ -461,7 +459,9 @@ export default function CoursesPage() {
     return m;
   }, [courses]);
 
-  // orderDepts caps the picker at 12, so this splits exactly 6 + 6.
+  // departments is capped at 12 (6+6) by curatedOnly, so this split is
+  // normally exactly even; the density scaling below is just a safety net
+  // in case that cap ever changes.
   const half  = Math.ceil(departments.length / 2);
   const left  = departments.slice(0, half);
   const right = departments.slice(half);
@@ -501,19 +501,17 @@ export default function CoursesPage() {
       : emblemBase;
     return (
       <div style={fixed ? S.homeColFixed : { ...S.home, animation: reduce ? "none" : "rise .5s ease both" }}>
-        <div style={{ ...S.topbar, marginBottom: compact ? 10 : 16 }}>
+        <div style={S.topbar}>
           <button style={S.backBtn} onClick={() => navigate("/")}>{isDesktop ? "← Back" : "←"}</button>
           <button style={S.linkBtn} onClick={() => navigate("/curriculum")}>View full curriculum →</button>
         </div>
 
         <div style={S.homeHeader}>
-          <p style={{ ...S.eyebrow, margin: compact ? "0 0 3px" : "0 0 6px" }}>Academic Resources</p>
-          <h1 style={{ ...S.pageH1, ...(compact ? { fontSize: "clamp(24px, 3vw, 34px)" } : null) }}>
-            Course Catalogue
-          </h1>
+          <p style={S.eyebrow}>Academic Resources</p>
+          <h1 style={S.pageH1}>Course Catalogue</h1>
         </div>
 
-        <div style={{ ...S.heroSearchWrap, margin: compact ? "10px auto 0" : "18px auto 0" }}>
+        <div style={S.heroSearchWrap}>
           <input
             style={S.heroSearchInput}
             placeholder="Search any course by name or code…"
@@ -552,11 +550,11 @@ export default function CoursesPage() {
 
         {isDesktop ? (
           <div style={fixed ? S.heroWrapFixed : undefined}>
-            <div style={{ ...S.heroGrid, marginTop: compact ? 8 : 18 }}>
-              <div style={{ ...S.deptCol, gap: (compact ? 6 : 10) * deptDensity }}>
+            <div style={S.heroGrid}>
+              <div style={{ ...S.deptCol, gap: 10 * deptDensity }}>
                 {loading
                   ? Array.from({ length: 6 }).map((_, i) => <DeptSkeleton key={i} side="left" density={deptDensity} />)
-                  : left.map(d => <DeptButton key={d.id} dept={d} side="left" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} compact={compact} />)}
+                  : left.map(d => <DeptButton key={d.id} dept={d} side="left" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} />)}
               </div>
 
               <div style={S.emblemWrap}>
@@ -564,10 +562,10 @@ export default function CoursesPage() {
                 <p style={S.emblemCaption}>Knowledge, kept alight.</p>
               </div>
 
-              <div style={{ ...S.deptCol, gap: (compact ? 6 : 10) * deptDensity }}>
+              <div style={{ ...S.deptCol, gap: 10 * deptDensity }}>
                 {loading
                   ? Array.from({ length: 6 }).map((_, i) => <DeptSkeleton key={i} side="right" density={deptDensity} />)
-                  : right.map(d => <DeptButton key={d.id} dept={d} side="right" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} compact={compact} />)}
+                  : right.map(d => <DeptButton key={d.id} dept={d} side="right" count={countByDept[d.id] || 0} onPick={openDept} density={deptDensity} />)}
               </div>
             </div>
           </div>
@@ -656,18 +654,10 @@ export default function CoursesPage() {
     </div>
   );
 
-  const homeFixed = view === "home" && isDesktop && isTall;
+  const homeFixed = view === "home" && isDesktop;
 
   return (
-    <div
-      className="uc-page"
-      style={{
-        ...(homeFixed ? S.pageHomeFixed : S.page),
-        ...(compact
-          ? { padding: `${NAV_OFFSET - 18}px 24px ${homeFixed ? 12 : 48}px` }
-          : null),
-      }}
-    >
+    <div className="uc-page" style={homeFixed ? S.pageHomeFixed : S.page}>
       {apiWaking && <div style={S.wakeToast}>API is waking up, please wait…</div>}
 
       {view === "home" ? renderHome(homeFixed) : renderDept()}
@@ -751,10 +741,7 @@ const S = {
     alignItems: "stretch", gap: "clamp(18px, 3.5vw, 52px)",
     marginTop: 18, width: "100%", height: "100%", maxHeight: "100%",
   },
-  // No overflow here on purpose: six tiles are meant to fit the viewport, and
-  // when they cannot (short window) the whole page scrolls instead — see
-  // homeFixed below. An inner scrollbar in one hero column looks broken.
-  deptCol: { display: "flex", flexDirection: "column", gap: 10, minHeight: 0, justifyContent: "center" },
+  deptCol: { display: "flex", flexDirection: "column", gap: 10, minHeight: 0, justifyContent: "center", overflowY: "auto", maxHeight: "100%" },
   emblemWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10 },
   emblemCaption: { fontSize: 11.5, fontWeight: 600, letterSpacing: 1.4, textTransform: "uppercase", color: C.textDim, margin: 0 },
   heroStack: { display: "flex", flexDirection: "column", alignItems: "center", gap: 26, marginTop: 24 },
@@ -762,19 +749,12 @@ const S = {
   deptBtn: {
     display: "flex", alignItems: "center", gap: 13,
     background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
-    padding: "11px 14px", cursor: "pointer", fontFamily: "inherit",
+    padding: "12px 15px", cursor: "pointer", fontFamily: "inherit",
     transition: "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
     width: "100%",
   },
-  deptAccent: { width: 4, height: 30, borderRadius: 4, flexShrink: 0 },
-  // Department names run long ("School of Mechanical and Materials
-  // Engineering"), so they wrap to at most two lines and ellipsize beyond it,
-  // which keeps every tile the same height.
-  deptName: {
-    fontSize: 14.5, fontWeight: 700, color: C.navyDeep, lineHeight: 1.22,
-    display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2,
-    overflow: "hidden",
-  },
+  deptAccent: { width: 4, height: 32, borderRadius: 4, flexShrink: 0 },
+  deptName: { fontSize: 15, fontWeight: 700, color: C.navyDeep, lineHeight: 1.2 },
   deptMeta: { fontSize: 11.5, fontWeight: 600, letterSpacing: 0.4, color: C.textDim, textTransform: "uppercase" },
   dept: { maxWidth: 1100, margin: "0 auto", position: "relative" },
   accentBar: { width: 64, height: 5, borderRadius: 4, marginBottom: 20 },

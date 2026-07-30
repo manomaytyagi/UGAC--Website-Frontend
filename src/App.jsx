@@ -72,15 +72,25 @@ export default function App() {
         <Route path="/resources/procedures/:slug" element={<ProcedurePage />} />
         <Route path="/announcements" element={<AnnouncementsPage />} />
         
-        <Route path="/community" element={<Navigate to="/community/feedback" replace />} />
-        <Route path="/community/feedback" element={<CommunityPage type="feedback" />} />
+        <Route path="/faculty-contacts" element={<Navigate to="/faculty-contacts/deans-and-schools" replace />} />
+        <Route
+          path="/faculty-contacts/deans-and-schools"
+          element={<CommunityPage type="deans-and-schools" />}
+        />
+        <Route
+          path="/faculty-contacts/faculty-advisers"
+          element={<CommunityPage type="faculty-advisers" />}
+        />
+        <Route path="/faculty-contacts/feedback" element={<CommunityPage type="feedback" />} />
+        <Route path="/community" element={<Navigate to="/faculty-contacts/deans-and-schools" replace />} />
+        <Route path="/community/feedback" element={<Navigate to="/faculty-contacts/feedback" replace />} />
         <Route
           path="/community/important-contacts"
-          element={<CommunityPage type="important-contacts" />}
+          element={<Navigate to="/faculty-contacts/deans-and-schools" replace />}
         />
         <Route
           path="/community/faculty-advisers"
-          element={<CommunityPage type="faculty-advisers" />}
+          element={<Navigate to="/faculty-contacts/faculty-advisers" replace />}
         />
         <Route path="*" element={<NotFound />} />
       </Routes>

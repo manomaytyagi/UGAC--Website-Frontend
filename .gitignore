@@ -20,10 +20,10 @@ build/
 
 # Logs
 *.log
+logs/
 
 # Images (screenshots)
 images/
-
 # Claude Code / AI tooling
 CLAUDE.md
 CODEBASE_LEARNED.md
@@ -37,3 +37,17 @@ skills-lock.json
 Thumbs.db
 .idea/
 .vscode/
+*.swp
+*.swo
+
+# Project-specific local dirs
+Docs/
+scripts/
+data/
+backend/Docs/
+backend/scripts/
+
+.serena/
+.commandcode/
+integration.md
+backend/repomix-output.xml
