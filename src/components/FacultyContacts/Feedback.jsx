@@ -25,7 +25,7 @@ const CHANNELS = [
     kicker: "Local first",
     name: "Your faculty advisor",
     blurb: "For batch-level issues, starting with your faculty advisor is often the quickest fix.",
-    href: "#", // TODO: replace with the faculty advisor page URL
+    href: "https://ugac-website-frontend.vercel.app/faculty-contacts/faculty-advisers",
     label: "Find your advisor",
   },
 ];
