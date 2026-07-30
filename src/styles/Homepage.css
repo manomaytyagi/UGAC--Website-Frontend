@@ -223,7 +223,7 @@ body.menu-open { overflow: hidden; }
 .spot__cta:hover .arw { transform: translateX(3px); }
 
 /* ============ SECTION SCAFFOLD ============ */
-.section { padding: 15px 0; }
+.section { padding: 25px 0; }
 /* Two edges keep the original 96px breathing room: the top of the register
    and the bottom of the community section. */
 #register { padding-top: 96px; }

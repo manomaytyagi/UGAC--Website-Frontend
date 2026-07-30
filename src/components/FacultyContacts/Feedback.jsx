@@ -18,22 +18,15 @@ const CHANNELS = [
     kicker: "Fastest route",
     name: "UGAC feedback desk",
     blurb: "Reaches the academic secretary team directly. Use this for anything that needs the council to act or escalate.",
-    href: "mailto:acad.secy@iitmandi.ac.in",
-    label: "acad.secy@iitmandi.ac.in",
-  },
-  {
-    kicker: "Anonymous",
-    name: "Anonymous form",
-    blurb: "Raise something without attaching your name. Include enough detail (course, batch, dates) so it can be acted on.",
-    href: "#",
-    label: "Open the form",
+    href: "mailto:academic_secretary@students.iitmandi.ac.in",
+    label: "academic_secretary@students.iitmandi.ac.in",
   },
   {
     kicker: "Local first",
-    name: "Your CR or advisor",
-    blurb: "For batch-level issues, starting with your class representative or faculty advisor is often the quickest fix.",
-    href: "#",
-    label: "Find your contacts",
+    name: "Your faculty advisor",
+    blurb: "For batch-level issues, starting with your faculty advisor is often the quickest fix.",
+    href: "#", // TODO: replace with the faculty advisor page URL
+    label: "Find your advisor",
   },
 ];
 

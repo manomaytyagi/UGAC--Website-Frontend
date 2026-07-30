@@ -408,7 +408,7 @@ export default function Homepage() {
               <Link to="/faculty-contacts/feedback">Feedback</Link>
               <Link to="/faculty-contacts/deans-and-schools">Deans & Schools</Link>
               <Link to="/faculty-contacts/faculty-advisers">Faculty Advisors</Link>
-              <a href="mailto:academic_secretary@iitmandi.ac.in">academic_secretary@iitmandi.ac.in</a>
+              <a href="mailto:academic_secretary@students.iitmandi.ac.in">academic_secretary@students.iitmandi.ac.in</a>
             </div>
           </div>
         </div>
