@@ -119,6 +119,43 @@
 .tm-support-blurb{font-size:13px;color:var(--muted);margin:0 0 12px;line-height:1.55;}
 .tm-support-lead{font:600 12.5px 'Inter',sans-serif;color:var(--navy2);margin:0;}
 
+/* ── Hall of Fame (past academic secretaries) ── */
+.tm-hof-grid{flex:1;min-height:0;overflow-y:auto;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px;
+  grid-auto-rows:max-content;align-content:start;align-items:start;
+  padding:2px 4px 4px 2px;}
+.tm-hof-grid::-webkit-scrollbar{width:6px;}
+.tm-hof-grid::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+.tm-hof-grid{scrollbar-width:thin;scrollbar-color:var(--line) transparent;}
+
+/* Portrait cards: the photo is the body of the card, details sit under it. */
+.tm-hof-card{position:relative;overflow:hidden;display:flex;flex-direction:column;
+  background:#fff;border:1px solid var(--line);border-radius:16px;
+  box-shadow:0 2px 8px color-mix(in srgb,var(--navy) 4%,transparent);transition:.18s;}
+.tm-hof-card:hover{transform:translateY(-3px);border-color:var(--c);
+  box-shadow:0 14px 30px color-mix(in srgb,var(--navy) 13%,transparent);}
+
+.tm-hof-photo{position:relative;width:100%;height:clamp(210px,30vh,300px);
+  flex:0 0 auto;background:var(--cbg);overflow:hidden;}
+.tm-hof-photo img{width:100%;height:100%;object-fit:cover;object-position:center 22%;display:block;}
+.tm-hof-photo::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(to top,color-mix(in srgb,var(--navy) 55%,transparent) 0,transparent 38%);}
+.tm-hof-initials{position:absolute;inset:0;display:grid;place-items:center;
+  color:#fff;font:800 clamp(30px,3.4vw,46px) 'Sora',sans-serif;letter-spacing:1.5px;}
+
+/* Sits over the photo so it costs no vertical space. */
+.tm-hof-session{position:absolute;left:11px;bottom:11px;z-index:1;
+  font:800 11px 'Inter',sans-serif;letter-spacing:.7px;color:#fff;
+  background:color-mix(in srgb,var(--navy) 62%,transparent);
+  border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(4px);
+  border-radius:7px;padding:4px 9px;}
+
+.tm-hof-info{flex:0 0 auto;display:flex;flex-direction:column;gap:7px;padding:14px 15px 15px;}
+.tm-hof-name{font:700 15.5px 'Sora',sans-serif;color:var(--navy);margin:0;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.tm-hof-role{font-size:11.5px;color:var(--muted);margin:0;line-height:1.4;}
+.tm-hof-empty{flex:1;display:grid;place-items:center;color:var(--muted);font-size:14px;text-align:center;}
+
 .tm-branchpage{height:100vh;overflow:hidden;display:flex;flex-direction:column;
   padding:calc(var(--navh) + 18px) 64px 28px;max-width:1280px;margin:0 auto;
   background:radial-gradient(900px 360px at 82% -8%, var(--cbg), transparent 60%),var(--bg);
@@ -157,6 +194,7 @@
   .tm-councillors{grid-template-columns:repeat(2,1fr);grid-auto-rows:auto;}
   .tm-branch-grid{grid-template-columns:repeat(2,1fr);grid-auto-rows:auto;}
   .tm-support-grid{grid-template-columns:1fr;}
+  .tm-hof-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));overflow:visible;}
   .tm-spotlight-inner{flex-wrap:wrap;}
   .tm-spotlight-contacts{align-items:flex-start;}
   .tm-branchpage{height:auto;overflow:visible;}
@@ -168,6 +206,7 @@
   .tm-nav-links{display:none;}
   .tm-screen,.tm-branchpage{padding:74px 16px 24px;}
   .tm-councillors,.tm-branch-grid{grid-template-columns:1fr;}
+  .tm-hof-grid{grid-template-columns:repeat(2,1fr);gap:12px;}
 }
 @media(prefers-reduced-motion:reduce){
   .tm-scroller{scroll-behavior:auto;}*{transition:none!important;animation:none!important;}

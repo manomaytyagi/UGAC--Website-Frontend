@@ -804,6 +804,27 @@ function shapeContacts(rows, indexes) {
    support members collapsed into one card per team.
    =========================================================================== */
 
+/* The schema has no instagram column yet, so admins put the handle either in
+   `portfolio` or in an ad-hoc field. Read every spelling, and treat a
+   portfolio link as Instagram only when it actually points there. */
+function instagramUrl(row) {
+  const direct = pick(row, "instagram_url", "instagram", "insta");
+  if (direct) return normalizeInstagram(direct);
+
+  const portfolio = pick(row, "portfolio");
+  if (portfolio && /instagram\.com/i.test(portfolio)) return normalizeInstagram(portfolio);
+
+  return null;
+}
+
+/** Accepts "@handle", "handle" or a full URL; always returns a full URL. */
+function normalizeInstagram(value) {
+  const v = String(value).trim();
+  if (isHttp(v)) return v;
+  const handle = v.replace(/^@/, "").replace(/^instagram\.com\//i, "").replace(/\/+$/, "");
+  return handle ? `https://www.instagram.com/${handle}` : null;
+}
+
 function shapeMember(row) {
   return {
     id: row.id,
@@ -812,9 +833,57 @@ function shapeMember(row) {
     email: pick(row, "email"),
     phone: pick(row, "phone", "contact"),
     linkedin: pick(row, "linkedin_url", "linkedin"),
+    instagram: instagramUrl(row),
     photo_url: pick(row, "photo_url"),
     code: initials(row.name),
   };
+}
+
+/* ---------------------------------------------------------------------------
+   Hall of Fame — past academic secretaries.
+
+   A row carries the year the term started (batch_year), and a term runs across
+   two calendar years: batch_year 2025 is the 2025–26 session. `council_session`
+   wins when an admin has typed it out, since that is the authoritative label.
+--------------------------------------------------------------------------- */
+
+const HALL_OF_FAME_TYPES = new Set([
+  "halloffame", "hallofframe", "hof", "pastsecretary", "pastsecretaries", "alumni",
+]);
+
+const isHallOfFame = (type) => HALL_OF_FAME_TYPES.has(slugKey(type));
+
+/** 2025 -> 2025, 25 -> 2025. Anything unusable -> null. */
+function sessionStartYear(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n >= 1900) return Math.trunc(n);
+  if (n < 100) return 2000 + Math.trunc(n);
+  return null;
+}
+
+/** 2025 -> "2025–26". */
+function sessionLabel(year) {
+  if (!year) return null;
+  return `${year}\u2013${String(year + 1).slice(-2)}`;
+}
+
+function shapeHallOfFame(rows) {
+  return rows
+    .map((row) => {
+      const year = sessionStartYear(row.batch_year);
+      const stored = clean(row.council_session);
+      const member = shapeMember(row);
+      return {
+        ...member,
+        role: clean(row.role) || "Academic Secretary",
+        session: stored || sessionLabel(year),
+        sessionStart: year ?? -1,
+        bio: clean(row.bio),
+      };
+    })
+    /* Most recent term first; undated rows sink to the bottom. */
+    .sort((a, b) => b.sessionStart - a.sessionStart || byOrder(a, b));
 }
 
 const byOrder = (a, b) => (a.order ?? 999) - (b.order ?? 999);
@@ -896,7 +965,10 @@ function shapeTeam(rows) {
     supportTeams[0].featured = true;
   }
 
-  return { secretary, branches: [...branches.values()], supportTeams };
+  /* Past academic secretaries. */
+  const hallOfFame = shapeHallOfFame(list.filter((m) => isHallOfFame(m.type)));
+
+  return { secretary, branches: [...branches.values()], supportTeams, hallOfFame };
 }
 
 /* ===========================================================================

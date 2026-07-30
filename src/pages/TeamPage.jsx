@@ -72,6 +72,35 @@ const FALLBACK_SUPPORT_TEAMS = [
   { id: "misc",   name: "Other Teams",     lead: "Team Lead", blurb: "Design, content, logistics, and more." },
 ];
 
+// Past academic secretaries. batch_year on the backend is the year the term
+// began, so 2025 is the 2025–26 session.
+//
+// The contact mix is uneven across these samples on purpose, so the card can be
+// checked against every combination the real data will produce — all three
+// links, two of them, or just one.
+const FALLBACK_HOF_SEED = [
+  { year: 2024, email: true,  linkedin: true,  instagram: true  },
+  { year: 2023, email: false, linkedin: true,  instagram: true  },
+  { year: 2022, email: true,  linkedin: true,  instagram: false },
+  { year: 2021, email: true,  linkedin: false, instagram: false },
+  { year: 2020, email: false, linkedin: false, instagram: true  },
+  { year: 2019, email: true,  linkedin: true,  instagram: true  },
+];
+
+const FALLBACK_HALL_OF_FAME = FALLBACK_HOF_SEED.map((seed, i) => ({
+  id: `hof-${seed.year}`,
+  name: `Past Secretary ${i + 1}`,
+  role: "Academic Secretary",
+  session: `${seed.year}\u2013${String(seed.year + 1).slice(-2)}`,
+  sessionStart: seed.year,
+  email: seed.email ? `acad.secy.${seed.year}@iitmandi.ac.in` : null,
+  linkedin: seed.linkedin ? "https://www.linkedin.com/" : null,
+  instagram: seed.instagram ? "https://www.instagram.com/" : null,
+  phone: null,
+  photo_url: null,
+  code: `S${i + 1}`,
+}));
+
 // function to show members photo or fallback to intials
 function Avatar({ member, size = 48, color }) {
   const [err, setErr] = useState(false);
@@ -99,6 +128,7 @@ const Icon = {
   mail: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></svg>,
   phone: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
   linkedin: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14zM8.34 18V9.99H5.67V18h2.67zM7 8.8a1.55 1.55 0 1 0 0-3.1 1.55 1.55 0 0 0 0 3.1zM18.34 18v-4.4c0-2.35-1.26-3.44-2.94-3.44-1.35 0-1.96.74-2.3 1.27V9.99h-2.67V18h2.67v-4.46c0-.24.02-.47.09-.64.18-.47.62-.96 1.34-.96.95 0 1.33.72 1.33 1.78V18h2.68z"/></svg>,
+  instagram: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5.5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg>,
 };
 
 // Fucntion to create contact Icons- Compact, Standard, Large, DArk
@@ -113,6 +143,7 @@ function Contacts({ member, accent = C.navyLight, large = false, onDark = false,
         {member.email && btn("e", `mailto:${member.email}`, Icon.mail, "Email")}
         {member.phone && btn("p", `tel:${member.phone}`, Icon.phone, "Call")}
         {member.linkedin && btn("l", member.linkedin, Icon.linkedin, "LinkedIn", "_blank")}
+        {member.instagram && btn("i", member.instagram, Icon.instagram, "Instagram", "_blank")}
       </div>
     );
   }
@@ -128,6 +159,7 @@ function Contacts({ member, accent = C.navyLight, large = false, onDark = false,
       {member.email && chip("e", `mailto:${member.email}`, Icon.mail, large ? member.email : "Email")}
       {member.phone && chip("p", `tel:${member.phone}`, Icon.phone, large ? member.phone : "Call")}
       {member.linkedin && chip("l", member.linkedin, Icon.linkedin, "LinkedIn", "_blank")}
+      {member.instagram && chip("i", member.instagram, Icon.instagram, "Instagram", "_blank")}
     </div>
   );
 }
@@ -214,37 +246,72 @@ function BranchesScreen({ branches, onOpen }) {
   );
 }
 
-function SupportScreen({ teams }) {
-  const featured = teams.find((t) => t.featured);
-  const rest = teams.filter((t) => !t.featured);
+// The card's photo is full-bleed rather than a fixed square, so Avatar (which
+// takes a pixel size) can't be reused here. Same initials fallback, but it
+// fills the whole panel instead of a chip.
+function HofPhoto({ member, color }) {
+  const [err, setErr] = useState(false);
+  const label =
+    member.code ||
+    member.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+
+  return (
+    <div className="tm-hof-photo">
+      {member.photo_url && !err ? (
+        <img src={member.photo_url} alt={member.name} onError={() => setErr(true)} />
+      ) : (
+        <span
+          className="tm-hof-initials"
+          aria-hidden
+          style={{ background: `linear-gradient(150deg, ${color}, ${tint(color, 0.68)})` }}
+        >
+          {label}
+        </span>
+      )}
+      {member.session && <span className="tm-hof-session">{member.session}</span>}
+    </div>
+  );
+}
+
+// Past academic secretaries. The session label comes from the backend's
+// batch_year (2025 -> "2025–26"), so the role reads "Academic Secretary · 2025–26".
+function HallOfFameScreen({ people }) {
   return (
     <div className="tm-screen">
       <div className="tm-screen-head">
         <div>
-          <span className="tm-eyebrow tm-eyebrow--orange">Support</span>
-          <h2 className="tm-screen-title">Support Teams</h2>
+          <span className="tm-eyebrow tm-eyebrow--orange">Hall of Fame</span>
+          <h2 className="tm-screen-title">Past Academic Secretaries</h2>
         </div>
+        <span className="tm-count">{people.length} {people.length === 1 ? "term" : "terms"}</span>
       </div>
-      <div className="tm-support-wrap">
-        {featured && (
-          <article className="tm-support tm-support--feat">
-            <span className="tm-support-kicker">Featured</span>
-            <h3 className="tm-support-name">{featured.name}</h3>
-            <p className="tm-support-blurb">{featured.blurb}</p>
-            <p className="tm-support-lead">{featured.lead}</p>
-          </article>
-        )}
-        <div className="tm-support-grid">
-          {rest.map((t) => (
-            <article key={t.id} className="tm-support">
-              <span className="tm-support-kicker">Support team</span>
-              <h3 className="tm-support-name">{t.name}</h3>
-              <p className="tm-support-blurb">{t.blurb}</p>
-              <p className="tm-support-lead">{t.lead}</p>
-            </article>
-          ))}
+
+      {people.length === 0 ? (
+        <p className="tm-hof-empty">
+          No past secretaries have been added yet. They’ll appear here once the council
+          publishes them.
+        </p>
+      ) : (
+        <div className="tm-hof-grid">
+          {people.map((p, i) => {
+            const color = BRANCH_COLORS[i % BRANCH_COLORS.length];
+            return (
+              <article
+                key={p.id || `${p.name}-${i}`}
+                className="tm-hof-card"
+                style={{ "--c": color, "--cbg": tint(color, 0.1), "--cbd": tint(color, 0.28) }}
+              >
+                <HofPhoto member={p} color={color} />
+                <div className="tm-hof-info">
+                  <h3 className="tm-hof-name">{p.name}</h3>
+                  <p className="tm-hof-role">{p.role}</p>
+                  <Contacts member={p} accent={color} compact />
+                </div>
+              </article>
+            );
+          })}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -320,7 +387,7 @@ function BranchPage({ branch, branches, onSwitch, onBack }) {
 const SECTIONS = [
   { id: "leadership", label: "Leadership" },
   { id: "branches",   label: "Branches" },
-  { id: "support",    label: "Support" },
+  { id: "hall",       label: "Hall of Fame" },
 ];
 
 export default function TeamPage({ onExit }) {
@@ -336,6 +403,7 @@ export default function TeamPage({ onExit }) {
       secretary: FALLBACK_SECRETARY,
       branches: FALLBACK_BRANCHES,
       supportTeams: FALLBACK_SUPPORT_TEAMS,
+      hallOfFame: FALLBACK_HALL_OF_FAME,
     }).then(({ data }) => {
       if (cancelled) return;
       // drop branch if data is not entered properly
@@ -344,6 +412,7 @@ export default function TeamPage({ onExit }) {
         secretary: data.secretary || FALLBACK_SECRETARY,
         branches: safeBranches.length > 0 ? safeBranches : FALLBACK_BRANCHES,
         supportTeams: data.supportTeams?.length > 0 ? data.supportTeams : FALLBACK_SUPPORT_TEAMS,
+        hallOfFame: data.hallOfFame?.length > 0 ? data.hallOfFame : FALLBACK_HALL_OF_FAME,
       });
     });
     return () => { cancelled = true; };
@@ -427,7 +496,7 @@ export default function TeamPage({ onExit }) {
               <BranchesScreen branches={team.branches} onOpen={openBranch} />
             </section>
             <section ref={(el) => (screenRefs.current[2] = el)} className="tm-snap">
-              <SupportScreen teams={team.supportTeams} />
+              <HallOfFameScreen people={team.hallOfFame} />
             </section>
           </div>
         </>
