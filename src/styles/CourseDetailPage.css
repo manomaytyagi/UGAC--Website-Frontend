@@ -42,6 +42,14 @@
   filter: brightness(1.06);
 }
 
+/* ── Inline curriculum viewer ── */
+.ucd-page .ucd-preview {
+  animation: rise .3s ease both;
+}
+.ucd-page .ucd-preview iframe {
+  border: 1px solid #dce3f0;
+}
+
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
   .ucd-page * {

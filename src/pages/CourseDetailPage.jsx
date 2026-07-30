@@ -12,8 +12,21 @@ function tint(hex, a) {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-/* The department — and its colour — come from the course row itself, so no
-   name-to-colour table is kept here. */
+const DEPT_COLOR = {
+  "Computer Science": "#4f7cc4",
+  "Electronics & Comm.": "#d18a3e",
+  "Electrical Engineering": "#e0aa6b",
+  "Mechanical Engineering": "#4e9b72",
+  "Civil Engineering": "#c25b52",
+  "Data Science & Eng.": "#2f8f86",
+  "Mathematics": "#37548f",
+  "Physics": "#6f7bd0",
+  "Chemistry": "#9c4a52",
+  "Biotechnology": "#2f6e54",
+  "Materials Engineering": "#a8682c",
+  "Humanities & Soc. Sci.": "#7a6cae",
+};
+const accentFor = (dept) => DEPT_COLOR[dept] || C.orange;
 
 function parseCode(code) {
   const s = (code || "").trim();
@@ -42,6 +55,80 @@ function normalizePrereqs(list) {
   });
 }
 
+/* Branches arrive as { code, name, color } from the bridge, or as bare codes. */
+function normalizeBranches(list) {
+  return (list || []).map((b) =>
+    typeof b === "string" ? { code: b, name: b, color: null } : b
+  ).filter((b) => b && (b.code || b.name));
+}
+
+/* ---------------------------------------------------------------------------
+   Google Drive links
+
+   Drive hands out share links shaped like
+
+     https://drive.google.com/file/d/<ID>/view?usp=sharing
+
+   which cannot go straight into an <iframe src> — the embeddable form is
+   /preview (NOT /embed, which is a common mix-up). These helpers pull the file
+   id out of whatever shape the admin pasted and rebuild the two URLs the
+   buttons need: one to embed on this page, one to open Drive itself.
+
+   Anything that is not a Drive link — an uploaded PDF served from our own
+   /storage/file/... route, say — is passed through untouched, since the
+   browser's built-in PDF viewer renders it inside the iframe just fine.
+--------------------------------------------------------------------------- */
+
+const DRIVE_HOST = /(^|\.)(drive|docs)\.google\.com$/i;
+const DRIVE_ID = "[-\\w]{10,}";
+
+function driveTarget(rawUrl) {
+  if (!rawUrl) return null;
+  let url;
+  try {
+    const base = typeof window !== "undefined" ? window.location.href : "https://x.invalid";
+    url = new URL(rawUrl, base);
+  } catch {
+    return null;
+  }
+  if (!DRIVE_HOST.test(url.hostname)) return null;
+
+  const path = url.pathname;
+
+  const editor = new RegExp(`/(document|spreadsheets|presentation)/d/(?:e/)?(${DRIVE_ID})`).exec(path);
+  if (editor) return { kind: editor[1], id: editor[2] };
+
+  const folder = new RegExp(`/folders/(${DRIVE_ID})`).exec(path);
+  if (folder) return { kind: "folder", id: folder[1] };
+
+  const file = new RegExp(`/file/d/(${DRIVE_ID})`).exec(path);
+  if (file) return { kind: "file", id: file[1] };
+
+  /* open?id=... and uc?export=download&id=... */
+  const queryId = url.searchParams.get("id");
+  if (queryId && new RegExp(`^${DRIVE_ID}$`).test(queryId)) return { kind: "file", id: queryId };
+
+  return null;
+}
+
+/** What to put in <iframe src> so the document renders on this page. */
+function embedUrl(rawUrl) {
+  const t = driveTarget(rawUrl);
+  if (!t) return rawUrl || null;
+  if (t.kind === "folder") return `https://drive.google.com/embeddedfolderview?id=${t.id}#list`;
+  if (t.kind === "file") return `https://drive.google.com/file/d/${t.id}/preview`;
+  return `https://docs.google.com/${t.kind}/d/${t.id}/preview`;
+}
+
+/** Where "Download" goes: Drive itself, so you can save it however you want. */
+function sourceUrl(rawUrl) {
+  const t = driveTarget(rawUrl);
+  if (!t) return rawUrl || null;
+  if (t.kind === "folder") return `https://drive.google.com/drive/folders/${t.id}`;
+  if (t.kind === "file") return `https://drive.google.com/file/d/${t.id}/view`;
+  return `https://docs.google.com/${t.kind}/d/${t.id}/edit`;
+}
+
 /* Minimal skeleton block used during loading. Kept local to avoid adding a new file. */
 function SkeletonBlock({ width = "100%", height = 12, mb = 8 }) {
   const h = typeof height === "number" ? `${height}px` : height;
@@ -53,14 +140,14 @@ function SkeletonBlock({ width = "100%", height = 12, mb = 8 }) {
 
 const FALLBACK_COURSE = {
   id: 1, code: "CS301", title: "Data Structures & Algorithms",
-  dept: "Computer Science and Engineering", dept_code: "CSE", dept_color: "#4f7cc4",
-  credits: 4,
+  dept: "Computer Science and Engineering", credits: 4,
   lecture_hours: 3, tutorial_hours: 1, practical_hours: 0,
   description: "Covers fundamental data structures (arrays, linked lists, trees, graphs, hash tables) and algorithmic paradigms including sorting, searching, dynamic programming, and greedy algorithms. Emphasis on analysing time and space complexity and on choosing the right structure for a given problem.",
   syllabus_url: null,
   curriculum_url: null,
   curriculum_title: null,
   programs: ["B.Tech.", "B.Tech. (Honours)"],
+  branches: ["CSE", "DSE"],
   prerequisites: [
     { id: 2, code: "CS101", title: "Introduction to Programming" },
     { id: 3, code: "CS201", title: "Discrete Mathematics" },
@@ -74,10 +161,12 @@ export default function CourseDetailPage() {
   const [loading, setLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
   const [apiWaking, setApiWaking] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!courseId) return;
     let wakeTimer;
+    setPreviewOpen(false);
     window.scrollTo({ top: 0 });
     const load = async () => {
       setLoading(true);
@@ -93,11 +182,15 @@ export default function CourseDetailPage() {
     return () => clearTimeout(wakeTimer);
   }, [courseId]);
 
-  const accent = course?.dept_color || C.orange;
+  const accent = course ? accentFor(course.dept) : C.orange;
   const meta = course ? parseCode(course.code) : { level: null, practical: false };
   const prereqs = normalizePrereqs(course?.prerequisites);
   const programs = course?.programs || [];
+  const branches = normalizeBranches(course?.branches);
   const curriculumUrl = course?.curriculum_url || course?.syllabus_url || null;
+  const previewHref = embedUrl(curriculumUrl);   // renders inside the page
+  const downloadHref = sourceUrl(curriculumUrl); // opens Drive to save it
+  const isDrive = !!driveTarget(curriculumUrl);
   const ltp = course
     ? [["L", course.lecture_hours], ["T", course.tutorial_hours], ["P", course.practical_hours]]
         .filter(([, val]) => val != null)
@@ -129,9 +222,7 @@ export default function CourseDetailPage() {
 
             <div style={S.headerRow}>
               <div style={{ minWidth: 0 }}>
-                <p style={{ ...S.eyebrow, color: accent }}>
-                  {course.code}{course.dept ? ` · ${course.dept}` : ""}
-                </p>
+                <p style={{ ...S.eyebrow, color: accent }}>{course.code} · {course.dept}</p>
                 <h1 style={S.h1}>{course.title}</h1>
                 <div style={S.chips}>
                   <span style={S.chip}>{course.credits} credits</span>
@@ -147,17 +238,35 @@ export default function CourseDetailPage() {
               </div>
             </div>
 
-            {programs.length > 0 && (
+            {(programs.length > 0 || branches.length > 0) && (
               <section style={S.section}>
                 <h2 style={S.sectionH2}>Intended for</h2>
-                <div style={S.metaBlock}>
-                  <span style={S.metaLabel}>Programs</span>
-                  <div style={S.pillList}>
-                    {programs.map(pr => (
-                      <span key={pr} style={S.progPill}>{pr}</span>
-                    ))}
+                {programs.length > 0 && (
+                  <div style={S.metaBlock}>
+                    <span style={S.metaLabel}>Programs</span>
+                    <div style={S.pillList}>
+                      {programs.map(pr => (
+                        <span key={pr} style={S.progPill}>{pr}</span>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
+                {branches.length > 0 && (
+                  <div style={S.metaBlock}>
+                    <span style={S.metaLabel}>Branches</span>
+                    <div style={S.pillList}>
+                      {branches.map(b => (
+                        <span key={b.code || b.name} style={S.branchPill}>
+                          <span style={{ ...S.branchDot, background: b.color || accent }} />
+                          {b.name || b.code}
+                          {b.code && b.name && b.name !== b.code && (
+                            <span style={S.branchCode}>{b.code}</span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             )}
 
@@ -206,22 +315,27 @@ export default function CourseDetailPage() {
                     </p>
                   </div>
                   <div style={S.docActions}>
-                    <a
+                    <button
+                      type="button"
                       className="ucd-doc-btn"
-                      href={curriculumUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      onClick={() => setPreviewOpen((open) => !open)}
+                      aria-expanded={previewOpen}
+                      aria-controls="ucd-curriculum-preview"
                       style={{ ...S.docPrimary, background: C.navyDeep }}
                     >
-                      View PDF ↗
-                    </a>
+                      {previewOpen ? "Hide preview" : "View PDF"}
+                    </button>
                     <a
                       className="ucd-doc-btn"
-                      href={curriculumUrl}
-                      download
+                      href={downloadHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      /* Drive ignores the download attribute across origins;
+                         files we serve ourselves honour it. */
+                      {...(isDrive ? {} : { download: "" })}
                       style={S.docGhost}
                     >
-                      Download
+                      Download ↗
                     </a>
                   </div>
                 </div>
@@ -229,6 +343,30 @@ export default function CourseDetailPage() {
                 <p style={S.muted}>
                   The curriculum PDF is not uploaded yet. It will appear here once the department publishes it.
                 </p>
+              )}
+
+              {curriculumUrl && previewOpen && (
+                <div id="ucd-curriculum-preview" className="ucd-preview" style={S.previewWrap}>
+                  <iframe
+                    src={previewHref}
+                    title={course.curriculum_title || `${course.code} curriculum`}
+                    style={S.previewFrame}
+                    loading="lazy"
+                    allowFullScreen
+                  />
+                  <p style={S.previewNote}>
+                    Nothing showing? The file has to be shared as “Anyone with the link” for it to
+                    render here.{" "}
+                    <a
+                      href={downloadHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={S.previewNoteLink}
+                    >
+                      Open it in Drive instead ↗
+                    </a>
+                  </p>
+                </div>
               )}
             </section>
 
@@ -303,6 +441,14 @@ const S = {
     background: C.white, border: `1px solid ${C.border}`, borderRadius: 20,
     padding: "7px 15px", fontSize: 13, fontWeight: 700, color: C.navyMid,
   },
+  branchPill: {
+    display: "inline-flex", alignItems: "center", gap: 9,
+    background: C.white, border: `1px solid ${C.border}`, borderRadius: 20,
+    padding: "7px 15px", fontSize: 13, fontWeight: 600, color: C.navyMid,
+  },
+  branchDot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
+  branchCode: { fontSize: 11, fontWeight: 800, letterSpacing: 0.8, color: C.textDim },
+
   docCard: {
     display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap",
     background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
@@ -322,7 +468,18 @@ const S = {
     borderRadius: 9, padding: "11px 20px", fontSize: 13, fontWeight: 700,
     textDecoration: "none", whiteSpace: "nowrap",
     boxShadow: "0 6px 18px rgba(13,27,62,0.22)",
+    /* also rendered as a <button>, so reset the UA defaults */
+    border: "none", cursor: "pointer", fontFamily: "inherit", lineHeight: 1.2,
   },
+
+  previewWrap: { marginTop: 16 },
+  previewFrame: {
+    display: "block", width: "100%", height: "clamp(420px, 68vh, 820px)",
+    border: `1px solid ${C.border}`, borderRadius: 12,
+    background: C.white, boxShadow: "0 2px 8px rgba(13,27,62,0.05)",
+  },
+  previewNote: { margin: "10px 2px 0", fontSize: 12.5, lineHeight: 1.6, color: C.textMuted },
+  previewNoteLink: { color: C.navyLight, fontWeight: 700, textDecoration: "none" },
   docGhost: {
     display: "inline-flex", alignItems: "center", borderRadius: 9,
     padding: "11px 20px", fontSize: 13, fontWeight: 700, textDecoration: "none",
