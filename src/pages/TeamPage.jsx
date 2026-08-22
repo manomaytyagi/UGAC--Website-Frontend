@@ -102,7 +102,7 @@ const FALLBACK_HALL_OF_FAME = FALLBACK_HOF_SEED.map((seed, i) => ({
 }));
 
 // function to show members photo or fallback to intials
-function Avatar({ member, size = 48, color }) {
+function Avatar({ member, size = 48, color, onDark = false }) {
   const [err, setErr] = useState(false);
   const label = member.code || member.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   const accent = color || C.navyLight;
@@ -113,11 +113,15 @@ function Avatar({ member, size = 48, color }) {
                  flexShrink: 0, border: `2px solid ${tint(accent, 0.35)}` }} />
     );
   }
+  // On a colour-filled card, a tinted plate with white initials disappears —
+  // the plate has to invert: solid white behind, the branch colour on top.
+  const fill = onDark
+    ? { background: C.white, color: accent }
+    : { background: `linear-gradient(140deg, ${accent}, ${tint(accent, 0.72)})`, color: C.white };
   return (
     <div aria-hidden style={{
       width: size, height: size, borderRadius: size * 0.26, flexShrink: 0,
-      background: `linear-gradient(140deg, ${accent}, ${tint(accent, 0.72)})`,
-      color: C.white, display: "flex", alignItems: "center", justifyContent: "center",
+      ...fill, display: "flex", alignItems: "center", justifyContent: "center",
       fontWeight: 700, fontSize: size * 0.34, letterSpacing: 0.5,
     }}>{label}</div>
   );
@@ -186,7 +190,9 @@ function LeadershipScreen({ secretary, branches }) {
           <div className="tm-spotlight-body">
             <span className="tm-eyebrow tm-eyebrow--orange">{secretary.role}</span>
             <h2 className="tm-spotlight-name">{secretary.name}</h2>
-            <p className="tm-spotlight-desc">{secretary.description}</p>
+            {secretary.description && secretary.description !== secretary.role && (
+              <p className="tm-spotlight-desc">{secretary.description}</p>
+            )}
             {mobile && <Contacts member={secretary} compact onDark />}
           </div>
           {!mobile && (
@@ -209,8 +215,14 @@ function LeadershipScreen({ secretary, branches }) {
           <article key={b.id} className="tm-cc-card" style={{ "--c": b.color, "--cbg": tint(b.color, 0.1) }}>
             <Avatar member={b.councillor} size={64} color={b.color} />
             <div className="tm-cc-body">
-              <span className="tm-branch-tag" style={{ "--c": b.color, "--cbg": tint(b.color, 0.12) }}>{b.name}</span>
-              <h3 className="tm-cc-name">{b.councillor.name}</h3>
+              {/* The tag sits in a fixed-height slot so a branch name that wraps
+                  to two lines doesn't shove the name and icons out of line with
+                  the neighbouring cards. */}
+              <span className="tm-cc-branch">
+                <span className="tm-branch-tag" title={b.name}
+                  style={{ "--c": b.color, "--cbg": tint(b.color, 0.12) }}>{b.name}</span>
+              </span>
+              <h3 className="tm-cc-name" title={b.councillor.name}>{b.councillor.name}</h3>
               <Contacts member={b.councillor} accent={b.color} compact />
             </div>
           </article>
@@ -275,7 +287,7 @@ function HofPhoto({ member, color }) {
 
 // Past academic secretaries. The session label comes from the backend's
 // batch_year (2025 -> "2025–26"), so the role reads "Academic Secretary · 2025–26".
-function HallOfFameScreen({ people }) {
+function HallOfFameScreen({ people = [] }) {
   return (
     <div className="tm-screen">
       <div className="tm-screen-head">
@@ -341,7 +353,7 @@ function BranchPage({ branch, branches, onSwitch, onBack }) {
 
         <div className="tm-bp-people">
           <div className="tm-lead-card" style={{ background: `linear-gradient(150deg, ${c}, ${tint(c, 0.78)})` }}>
-            <Avatar member={branch.councillor} size={72} color={C.white} />
+            <Avatar member={branch.councillor} size={72} color={c} onDark />
             <div>
               <span className="tm-eyebrow tm-eyebrow--white">Councillor</span>
               <h3 className="tm-lead-name">{branch.councillor.name}</h3>
@@ -349,18 +361,22 @@ function BranchPage({ branch, branches, onSwitch, onBack }) {
             </div>
           </div>
           <p className="tm-sub-label">Sub-councillors</p>
-          <div className="tm-sub-list">
-            {branch.subs.map((s, i) => (
-              <div className="tm-sub-card" key={i} style={{ "--c": c, "--cbg": tint(c, 0.08) }}>
-                <Avatar member={s} size={52} color={c} />
-                <div className="tm-cc-body">
-                  <h4 className="tm-cc-name">{s.name}</h4>
-                  <p className="tm-cc-role">{s.role}</p>
+          {branch.subs.length === 0 ? (
+            <p className="tm-sub-empty">No sub-councillors listed for this branch yet.</p>
+          ) : (
+            <div className="tm-sub-list">
+              {branch.subs.map((s, i) => (
+                <div className="tm-sub-card" key={i} style={{ "--c": c, "--cbg": tint(c, 0.08) }}>
+                  <Avatar member={s} size={52} color={c} />
+                  <div className="tm-cc-body">
+                    <h4 className="tm-cc-name" title={s.name}>{s.name}</h4>
+                    <p className="tm-cc-role">{s.role}</p>
+                  </div>
+                  <Contacts member={s} accent={c} compact />
                 </div>
-                <Contacts member={s} accent={c} compact />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="tm-bp-switch">
@@ -404,15 +420,20 @@ export default function TeamPage({ onExit }) {
       branches: FALLBACK_BRANCHES,
       supportTeams: FALLBACK_SUPPORT_TEAMS,
       hallOfFame: FALLBACK_HALL_OF_FAME,
-    }).then(({ data }) => {
+    }).then(({ data, source }) => {
       if (cancelled) return;
       // drop branch if data is not entered properly
       const safeBranches = (data.branches || []).filter((b) => b.councillor);
+      // An empty Hall of Fame from a working API is real data, not a failure —
+      // HallOfFameScreen has an honest empty state for it. Only fall back to
+      // placeholders when the request itself failed, or the section silently
+      // renders "Past Secretary 1…6" forever and looks live while being static.
       setTeam({
         secretary: data.secretary || FALLBACK_SECRETARY,
         branches: safeBranches.length > 0 ? safeBranches : FALLBACK_BRANCHES,
         supportTeams: data.supportTeams?.length > 0 ? data.supportTeams : FALLBACK_SUPPORT_TEAMS,
-        hallOfFame: data.hallOfFame?.length > 0 ? data.hallOfFame : FALLBACK_HALL_OF_FAME,
+        hallOfFame:
+          source === "fallback" ? FALLBACK_HALL_OF_FAME : data.hallOfFame || [],
       });
     });
     return () => { cancelled = true; };

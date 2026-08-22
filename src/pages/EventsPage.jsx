@@ -171,9 +171,9 @@ function UpcomingCard({ event }) {
         <p style={S.upDesc}>{event.desc}</p>
 
         <div style={S.upMeta}>
-          {event.time  && <span style={S.upMetaItem}>🕐 {event.time}</span>}
-          {event.venue && <span style={S.upMetaItem}>📍 {event.venue}</span>}
-          <span style={S.upMetaItem}>📅 {formatDate(event.date)}</span>
+          {event.time  && <span style={S.upMetaItem}> {event.time}</span>}
+          {event.venue && <span style={S.upMetaItem}> {event.venue}</span>}
+          <span style={S.upMetaItem}> {formatDate(event.date)}</span>
         </div>
 
         {event.form_url && !isPast && (
@@ -230,9 +230,9 @@ function PastEventCard({ event, onOpen }) {
         {event.desc && <p className="uc-past-desc">{event.desc}</p>}
 
         <div className="uc-past-meta">
-          {event.venue && <span className="uc-past-pill">📍 {event.venue}</span>}
-          {event.audience && <span className="uc-past-pill">👥 {event.audience}</span>}
-          <span className="uc-past-pill">📅 {formatDate(event.date)}</span>
+          {event.venue && <span className="uc-past-pill"> {event.venue}</span>}
+          {event.audience && <span className="uc-past-pill"> {event.audience}</span>}
+          <span className="uc-past-pill"> {formatDate(event.date)}</span>
         </div>
 
         <div className="uc-past-actions">
@@ -517,7 +517,7 @@ export default function EventsPage({ onBack }) {
               <p style={S.emptyIcon}>📜</p>
               <p style={S.emptyText}>
                 {filterTag === "All"
-                  ? "Nothing archived yet — past events show up here once they're done."
+                  ? "Nothing archived yet -past events show up here once they're done."
                   : `No past events tagged "${filterTag}". Try another filter.`}
               </p>
             </div>
