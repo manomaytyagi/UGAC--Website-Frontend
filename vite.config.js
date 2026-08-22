@@ -4,8 +4,7 @@ import path from "path";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
-  const backendTarget =
-    env.API_PROXY_TARGET || "https://ug-0ceb454fbac544039d40462fe569d71b.ecs.ap-south-1.on.aws/";
+  const backendTarget = "https://ugac-api.onrender.com/";
 
   return {
     plugins: [react()],
