@@ -24,6 +24,7 @@ function formatDate(iso) {
 }
 function getDay(iso)   { return new Date(iso).getDate(); }
 function getMonth(iso) { return new Date(iso).toLocaleString("en-IN", { month: "short" }).toUpperCase(); }
+function getYear(iso)  { return new Date(iso).getFullYear(); }
 
 function useIsMobile(bp = 640) {
   const [mobile, setMobile] = useState(
@@ -61,7 +62,10 @@ function toCanvaEmbed(url) {
   return `${url}${sep}embed`;
 }
 
-function EventBanner({ bannerKey, title }) {
+function EventBanner({ bannerKey, title, variant = "full" }) {
+  // "full"  — natural height, used by the upcoming cards.
+  // "cover" — fills its container and crops, used by the past archive cards.
+  const isCover = variant === "cover";
   // If the value is already a full URL, use it directly as the image.
   const isDirectUrl = typeof bannerKey === "string" && /^https?:\/\//.test(bannerKey);
 
@@ -77,8 +81,13 @@ function EventBanner({ bannerKey, title }) {
 
   if (!url || err) {
     return (
-      <div style={S.bannerPlaceholder}>
-        <span style={S.bannerPlaceholderText}>{title.slice(0, 2).toUpperCase()}</span>
+      <div
+        className={isCover ? "uc-past-fill uc-past-ph" : ""}
+        style={isCover ? undefined : S.bannerPlaceholder}
+      >
+        <span style={isCover ? undefined : S.bannerPlaceholderText} className={isCover ? "uc-past-ph-text" : ""}>
+          {title.slice(0, 2).toUpperCase()}
+        </span>
       </div>
     );
   }
@@ -86,7 +95,9 @@ function EventBanner({ bannerKey, title }) {
     <img
       src={url} alt={title}
       onError={() => setErr(true)}
-      style={S.bannerImg}
+      loading="lazy"
+      className={isCover ? "uc-past-fill" : ""}
+      style={isCover ? undefined : S.bannerImg}
     />
   );
 }
@@ -175,39 +186,77 @@ function UpcomingCard({ event }) {
   );
 }
 
-function PastEventRow({ event, onOpen }) {
+function PastEventCard({ event, onOpen }) {
   const ts = tagStyle(event.tag);
-  const hasDetails =
-    event.youtube_url || event.canva_url || (event.documents && event.documents.length > 0);
+  const hasVideo = !!event.youtube_url;
+  const hasCanva = !!event.canva_url;
+  const docCount = event.documents ? event.documents.length : 0;
+  const hasDetails = hasVideo || hasCanva || docCount > 0;
 
   return (
-    <div style={S.pastRow}>
-      {/* Date block */}
-      <div style={S.pastDateBlock}>
-        <span style={S.pastDay}>{getDay(event.date)}</span>
-        <span style={S.pastMonth}>{getMonth(event.date)}</span>
+    <article className="uc-past-card">
+      {/* Media panel — the same banner the upcoming cards use */}
+      <div className="uc-past-media">
+        <EventBanner bannerKey={event.banner_key} title={event.title} variant="cover" />
+        <div className="uc-past-scrim" />
+
+        <div className="uc-past-date">
+          <span className="uc-past-date-day">{getDay(event.date)}</span>
+          <span className="uc-past-date-month">{getMonth(event.date)}</span>
+          <span className="uc-past-date-year">{getYear(event.date)}</span>
+        </div>
+
+        {/* Chips say what survives from the event, not what it was */}
+        {hasDetails && (
+          <div className="uc-past-chips">
+            {hasVideo && <span className="uc-past-chip">▶ Recording</span>}
+            {hasCanva && <span className="uc-past-chip">🖼 Slides</span>}
+            {docCount > 0 && (
+              <span className="uc-past-chip">📎 {docCount} {docCount === 1 ? "file" : "files"}</span>
+            )}
+          </div>
+        )}
       </div>
 
-      <div style={S.pastDivider} />
-
       {/* Content */}
-      <div style={S.pastContent}>
-        <div style={S.pastTopRow}>
-          <h3 style={S.pastTitle}>{event.title}</h3>
-          <div style={S.pastBadges}>
-            <span style={{ ...S.tagSmall, background: ts.bg, color: ts.color }}>{event.tag}</span>
-          </div>
+      <div className="uc-past-body">
+        <div className="uc-past-head">
+          <h3 className="uc-past-title">{event.title}</h3>
+          <span className="uc-past-tag" style={{ background: ts.bg, color: ts.color }}>
+            {event.tag}
+          </span>
         </div>
-        <p style={S.pastDesc}>{event.desc}</p>
 
-        <div style={S.pastActions}>
-          {event.report_key && <ReportDownload fileKey={event.report_key} />}
+        {event.desc && <p className="uc-past-desc">{event.desc}</p>}
+
+        <div className="uc-past-meta">
+          {event.venue && <span className="uc-past-pill">📍 {event.venue}</span>}
+          {event.audience && <span className="uc-past-pill">👥 {event.audience}</span>}
+          <span className="uc-past-pill">📅 {formatDate(event.date)}</span>
+        </div>
+
+        <div className="uc-past-actions">
           {hasDetails && (
-            <button style={S.viewDetailsBtn} onClick={() => onOpen(event)}>
-              View Details →
+            <button className="uc-past-btn uc-past-btn-primary" onClick={() => onOpen(event)}>
+              View details →
             </button>
           )}
+          {event.report_key && <ReportDownload fileKey={event.report_key} className="uc-past-btn uc-past-btn-ghost" />}
         </div>
+      </div>
+    </article>
+  );
+}
+
+function PastCardSkeleton() {
+  return (
+    <div className="uc-past-card uc-past-skel" aria-hidden="true">
+      <div className="uc-past-media" />
+      <div className="uc-past-body">
+        <div className="uc-skel-bar" style={{ width: "62%", height: 16 }} />
+        <div className="uc-skel-bar" style={{ width: "94%", height: 11 }} />
+        <div className="uc-skel-bar" style={{ width: "80%", height: 11 }} />
+        <div className="uc-skel-bar" style={{ width: "34%", height: 28, marginTop: 8, borderRadius: 8 }} />
       </div>
     </div>
   );
@@ -322,7 +371,7 @@ function EventDetailsModal({ event, onClose }) {
   );
 }
 
-function ReportDownload({ fileKey }) {
+function ReportDownload({ fileKey, className = "" }) {
   const [fetching, setFetching] = useState(false);
   const [err, setErr]           = useState("");
 
@@ -341,12 +390,17 @@ function ReportDownload({ fileKey }) {
   };
 
   return (
-    <div>
-      <a href="#" onClick={handleClick} style={{ ...S.reportBtn, opacity: fetching ? 0.5 : 1 }}>
-        {fetching ? "⏳ Fetching…" : "📄 Download Report"}
+    <>
+      <a
+        href="#"
+        onClick={handleClick}
+        className={className}
+        style={className ? { opacity: fetching ? 0.5 : 1 } : { ...S.reportBtn, opacity: fetching ? 0.5 : 1 }}
+      >
+        {fetching ? "⏳ Fetching…" : "📄 Download report"}
       </a>
-      {err && <span style={{ fontSize: 11, color: "#dc2626", marginLeft: 8 }}>{err}</span>}
-    </div>
+      {err && <span className="uc-past-err">{err}</span>}
+    </>
   );
 }
 export default function EventsPage({ onBack }) {
@@ -384,7 +438,7 @@ export default function EventsPage({ onBack }) {
   const filteredPast     = past.filter(e => filterTag === "All" || e.tag === filterTag);
 
   return (
-    <div className="uc-events" style={S.page}>
+    <div className="uc-events" style={{ ...S.page, ...cssVars }}>
 
       {/* Wake toast */}
       {apiWaking && <div style={S.wakeToast}>⏳ API is waking up, please wait…</div>}
@@ -455,17 +509,21 @@ export default function EventsPage({ onBack }) {
         {/* ── Past ── */}
         {activeTab === "past" && (
           loading ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              {Array.from({ length: 4 }).map((_, i) => <EventCardSkeleton key={i} />)}
+            <div className="uc-past-list">
+              {Array.from({ length: 3 }).map((_, i) => <PastCardSkeleton key={i} />)}
             </div>
           ) : filteredPast.length === 0 ? (
             <div style={S.empty}>
               <p style={S.emptyIcon}>📜</p>
-              <p style={S.emptyText}>No past events{filterTag !== "All" ? ` tagged "${filterTag}"` : ""}.</p>
+              <p style={S.emptyText}>
+                {filterTag === "All"
+                  ? "Nothing archived yet — past events show up here once they're done."
+                  : `No past events tagged "${filterTag}". Try another filter.`}
+              </p>
             </div>
           ) : (
-            <div style={S.pastList}>
-              {filteredPast.map(e => <PastEventRow key={e.id} event={e} onOpen={setSelectedEvent} />)}
+            <div className="uc-past-list">
+              {filteredPast.map(e => <PastEventCard key={e.id} event={e} onOpen={setSelectedEvent} />)}
             </div>
           )
         )}
@@ -479,6 +537,20 @@ export default function EventsPage({ onBack }) {
     </div>
   );
 }
+
+/* The past-events section is styled in EventsPage.css so it can use hover,
+   media queries and line clamping. These vars hand the JS colour tokens to
+   that stylesheet, so the palette still has a single source of truth. */
+const cssVars = {
+  "--uc-navy-deep": C.navyDeep,
+  "--uc-navy-mid":  C.navyMid,
+  "--uc-orange":    C.orange,
+  "--uc-white":     C.white,
+  "--uc-off-white": C.offWhite,
+  "--uc-border":    C.border,
+  "--uc-text-muted": C.textMuted,
+  "--uc-text-dim":   C.textDim,
+};
 
 const S = {
   page: {
@@ -655,44 +727,11 @@ const S = {
     marginTop: 10,
   },
 
-  pastList: { display: "flex", flexDirection: "column", gap: 0 },
-  pastRow: {
-    display: "flex", alignItems: "flex-start", gap: 24,
-    borderTop: `1px solid ${C.border}`, padding: "28px 0",
-  },
-  pastDateBlock: {
-    display: "flex", flexDirection: "column", alignItems: "center",
-    background: C.navyDeep, borderRadius: 12, padding: "12px 16px",
-    flexShrink: 0, minWidth: 58,
-  },
-  pastDay:   { fontSize: 24, fontWeight: 800, color: C.white, lineHeight: 1 },
-  pastMonth: { fontSize: 10, fontWeight: 700, color: C.orange, letterSpacing: 2, marginTop: 4 },
-  pastDivider: { width: 1, alignSelf: "stretch", background: C.border, flexShrink: 0 },
-  pastContent: { flex: 1, minWidth: 0 },
-  pastTopRow: {
-    display: "flex", alignItems: "flex-start", justifyContent: "space-between",
-    gap: 12, flexWrap: "wrap", marginBottom: 8,
-  },
-  pastTitle:  { fontSize: 16, fontWeight: 700, color: C.navyDeep, margin: 0 },
-  pastBadges: { display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0 },
-  pastDesc:   { fontSize: 13, lineHeight: 1.7, color: C.textMuted, margin: "0 0 10px" },
-  pastActions: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginTop: 4 },
-  tagSmall: { borderRadius: 6, padding: "3px 9px", fontSize: 11, fontWeight: 700 },
-  venuePill: {
-    background: C.offWhite, border: `1px solid ${C.border}`,
-    borderRadius: 6, padding: "3px 9px", fontSize: 11, fontWeight: 500, color: C.textMuted,
-  },
   reportBtn: {
     display: "inline-block",
     background: "none", border: `1px solid ${C.border}`,
     borderRadius: 7, padding: "6px 14px",
     fontSize: 12, fontWeight: 700, color: C.navyMid, textDecoration: "none", cursor: "pointer",
-  },
-  viewDetailsBtn: {
-    display: "inline-block",
-    background: C.navyDeep, color: C.white, border: "none",
-    borderRadius: 8, padding: "8px 16px",
-    fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
   },
 
   /* ── Details modal ───────────────────────────────────────── */

@@ -1,6 +1,11 @@
 /* =====================================================================
    EventsPage — extracted from inline CSS template literal
    Colours: #ee9116 orange
+
+   Colour tokens come in as CSS variables set on .uc-events by the
+   component (see `cssVars` in EventsPage.jsx), so the palette still
+   lives in colors.js. Fallbacks are listed so the file degrades on its
+   own if a token is ever dropped.
    ===================================================================== */
 
 @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .5 } }
@@ -39,11 +44,358 @@
   transform: translateY(0);
 }
 
+/* =====================================================================
+   Past events — an archive of what happened, with the event banner
+   carried over from the upcoming cards. Laid out as wide media rows so
+   the poster reads at a glance and the leftover material (recording,
+   slides, files) is visible without opening anything.
+   ===================================================================== */
+.uc-events .uc-past-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.uc-events .uc-past-card {
+  display: grid;
+  grid-template-columns: 288px 1fr;
+  background: var(--uc-white, #fff);
+  border: 1px solid var(--uc-border, #e4e9f2);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(13, 27, 62, 0.06);
+  transition: transform .3s cubic-bezier(.22, .61, .36, 1), box-shadow .3s ease;
+  animation: rise .45s cubic-bezier(.22, .61, .36, 1) both;
+}
+
+/* Short stagger so the list assembles instead of snapping in */
+.uc-events .uc-past-card:nth-child(2) { animation-delay: .06s }
+.uc-events .uc-past-card:nth-child(3) { animation-delay: .12s }
+.uc-events .uc-past-card:nth-child(4) { animation-delay: .18s }
+.uc-events .uc-past-card:nth-child(n + 5) { animation-delay: .24s }
+
+.uc-events .uc-past-card:focus-within {
+  box-shadow: 0 14px 34px rgba(13, 27, 62, 0.13);
+}
+
+@media (hover: hover) {
+  /* On pointer devices the rule draws itself in on hover instead of
+     sitting there permanently. Touch devices keep it visible. */
+  .uc-events .uc-past-media::after {
+    transform: scaleY(0);
+  }
+  .uc-events .uc-past-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 34px rgba(13, 27, 62, 0.13);
+  }
+  .uc-events .uc-past-card:hover .uc-past-fill {
+    transform: scale(1.06);
+    filter: saturate(1);
+  }
+  .uc-events .uc-past-card:hover .uc-past-media::after,
+  .uc-events .uc-past-card:focus-within .uc-past-media::after {
+    transform: scaleY(1);
+  }
+}
+
+/* ── Media panel ─────────────────────────────────────────────────── */
+.uc-events .uc-past-media {
+  position: relative;
+  overflow: hidden;
+  min-height: 190px;
+  background: var(--uc-navy-deep, #0d1b3e);
+}
+
+/* Signature: an orange rule that draws itself down the seam between the
+   banner and the text — the same accent as the active tab underline. */
+.uc-events .uc-past-media::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--uc-orange, #ee9116);
+  transform: scaleY(1);
+  transform-origin: top;
+  transition: transform .4s cubic-bezier(.22, .61, .36, 1);
+  z-index: 3;
+}
+
+.uc-events .uc-past-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Archive material reads a touch cooler until you reach for it */
+  filter: saturate(.82);
+  transition: transform .55s cubic-bezier(.22, .61, .36, 1), filter .4s ease;
+}
+
+.uc-events .uc-past-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--uc-navy-deep, #0d1b3e), var(--uc-navy-mid, #1c3266));
+}
+.uc-events .uc-past-ph-text {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: rgba(255, 255, 255, 0.16);
+}
+
+.uc-events .uc-past-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(13, 27, 62, .34) 0%, rgba(13, 27, 62, 0) 42%),
+    linear-gradient(to top,    rgba(13, 27, 62, .60) 0%, rgba(13, 27, 62, 0) 46%);
+}
+
+/* Date stamp */
+.uc-events .uc-past-date {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 50px;
+  padding: 8px 10px 7px;
+  border-radius: 11px;
+  background: var(--uc-white, #fff);
+  box-shadow: 0 3px 12px rgba(13, 27, 62, 0.22);
+}
+.uc-events .uc-past-date-day {
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--uc-navy-deep, #0d1b3e);
+}
+.uc-events .uc-past-date-month {
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  color: var(--uc-orange, #ee9116);
+}
+.uc-events .uc-past-date-year {
+  margin-top: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .6px;
+  color: var(--uc-text-dim, #7c8aa5);
+}
+
+/* Chips: what's left from the event */
+.uc-events .uc-past-chips {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.uc-events .uc-past-chip {
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  color: #fff;
+  background: rgba(13, 27, 62, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* ── Body ────────────────────────────────────────────────────────── */
+.uc-events .uc-past-body {
+  min-width: 0;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.uc-events .uc-past-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.uc-events .uc-past-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -.2px;
+  color: var(--uc-navy-deep, #0d1b3e);
+}
+.uc-events .uc-past-tag {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.uc-events .uc-past-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--uc-text-muted, #5b6b88);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.uc-events .uc-past-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.uc-events .uc-past-pill {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--uc-text-muted, #5b6b88);
+  background: var(--uc-off-white, #f5f7fb);
+  border: 1px solid var(--uc-border, #e4e9f2);
+}
+
+.uc-events .uc-past-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.uc-events .uc-past-btn {
+  display: inline-block;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .2s ease, color .2s ease, border-color .2s ease;
+}
+.uc-events .uc-past-btn-primary {
+  background: var(--uc-navy-deep, #0d1b3e);
+  color: #fff;
+  border: 1px solid var(--uc-navy-deep, #0d1b3e);
+}
+.uc-events .uc-past-btn-ghost {
+  background: transparent;
+  color: var(--uc-navy-mid, #1c3266);
+  border: 1px solid var(--uc-border, #e4e9f2);
+}
+@media (hover: hover) {
+  .uc-events .uc-past-btn-primary:hover {
+    background: var(--uc-orange, #ee9116);
+    border-color: var(--uc-orange, #ee9116);
+  }
+  .uc-events .uc-past-btn-ghost:hover {
+    color: var(--uc-orange, #ee9116);
+    border-color: var(--uc-orange, #ee9116);
+  }
+}
+
+.uc-events .uc-past-err {
+  font-size: 11px;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+/* ── Loading state, shaped like the real card ────────────────────── */
+.uc-events .uc-past-skel {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.uc-events .uc-past-skel .uc-past-media {
+  background: #dce3f0;
+}
+.uc-events .uc-past-skel .uc-past-media::after {
+  display: none;
+}
+.uc-events .uc-past-skel .uc-past-body {
+  gap: 11px;
+  justify-content: center;
+}
+.uc-events .uc-skel-bar {
+  background: #e4e9f2;
+  border-radius: 5px;
+}
+
+/* ── Narrow screens: banner on top, content below ────────────────── */
+@media (max-width: 860px) {
+  .uc-events .uc-past-card {
+    grid-template-columns: 1fr;
+  }
+  .uc-events .uc-past-media {
+    min-height: 0;
+    aspect-ratio: 16 / 9;
+  }
+  .uc-events .uc-past-media::after {
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: auto;
+    height: 3px;
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  .uc-events .uc-past-body {
+    padding: 18px;
+  }
+  .uc-events .uc-past-btn {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+}
+
+@media (max-width: 420px) {
+  .uc-events .uc-past-title { font-size: 15.5px }
+  .uc-events .uc-past-desc  { -webkit-line-clamp: 3; line-clamp: 3 }
+}
+
+/* =====================================================================
+   Motion preferences
+   ===================================================================== */
 @media (prefers-reduced-motion: reduce) {
   .uc-events * {
     animation: none !important;
   }
-  .uc-events .uc-up-card .uc-up-overlay {
+  .uc-events .uc-up-card .uc-up-overlay,
+  .uc-events .uc-past-card,
+  .uc-events .uc-past-fill,
+  .uc-events .uc-past-media::after {
     transition: none;
+  }
+  .uc-events .uc-past-card:hover {
+    transform: none;
+  }
+  .uc-events .uc-past-card:hover .uc-past-fill {
+    transform: none;
+  }
+  .uc-events .uc-past-media::after {
+    transform: scaleY(1);
   }
 }

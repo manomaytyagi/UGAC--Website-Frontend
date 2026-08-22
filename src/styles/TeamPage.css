@@ -152,7 +152,7 @@
 
 .tm-hof-info{flex:0 0 auto;display:flex;flex-direction:column;gap:7px;padding:14px 15px 15px;}
 .tm-hof-name{font:700 15.5px 'Sora',sans-serif;color:var(--navy);margin:0;line-height:1.25;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  display:-webkit-box;line-clamp:2;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .tm-hof-role{font-size:11.5px;color:var(--muted);margin:0;line-height:1.4;}
 .tm-hof-empty{flex:1;display:grid;place-items:center;color:var(--muted);font-size:14px;text-align:center;}
 
