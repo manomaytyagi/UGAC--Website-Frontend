@@ -215,12 +215,12 @@ function LeadershipScreen({ secretary, branches }) {
           <article key={b.id} className="tm-cc-card" style={{ "--c": b.color, "--cbg": tint(b.color, 0.1) }}>
             <Avatar member={b.councillor} size={64} color={b.color} />
             <div className="tm-cc-body">
-              {/* The tag sits in a fixed-height slot so a branch name that wraps
-                  to two lines doesn't shove the name and icons out of line with
-                  the neighbouring cards. */}
+              {/* Short code (matches the Branches screen's badges) so the pill
+                  never wraps and every card's name lines up at the same spot;
+                  full name is still one hover away via the title attribute. */}
               <span className="tm-cc-branch">
                 <span className="tm-branch-tag" title={b.name}
-                  style={{ "--c": b.color, "--cbg": tint(b.color, 0.12) }}>{b.name}</span>
+                  style={{ "--c": b.color, "--cbg": tint(b.color, 0.12) }}>{b.code}</span>
               </span>
               <h3 className="tm-cc-name" title={b.councillor.name}>{b.councillor.name}</h3>
               <Contacts member={b.councillor} accent={b.color} compact />
