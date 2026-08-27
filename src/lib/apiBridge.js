@@ -868,11 +868,24 @@ function sessionLabel(year) {
   return `${year}\u2013${String(year + 1).slice(-2)}`;
 }
 
+/** Pulls a year out of a hand-typed label like "2022–23" or "22-23", for
+    rows where batch_year was left blank or entered badly. Reuses
+    sessionStartYear so "22" still resolves to 2022 the same way it would
+    from a numeric batch_year. */
+function yearFromSessionLabel(label) {
+  if (!label) return null;
+  const m = /\d{4}|\d{2}/.exec(label);
+  return m ? sessionStartYear(m[0]) : null;
+}
+
 function shapeHallOfFame(rows) {
   return rows
     .map((row) => {
-      const year = sessionStartYear(row.batch_year);
       const stored = clean(row.council_session);
+      // batch_year is authoritative when present; council_session is admin
+      // free text but is often the only place a year survives if batch_year
+      // was never filled in, so it's worth a shot before giving up.
+      const year = sessionStartYear(row.batch_year) ?? yearFromSessionLabel(stored);
       const member = shapeMember(row);
       return {
         ...member,

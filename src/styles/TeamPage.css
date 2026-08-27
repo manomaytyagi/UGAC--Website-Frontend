@@ -79,19 +79,26 @@
 .tm-councillors{flex:1;min-height:0;overflow-y:auto;display:grid;
   grid-template-columns:repeat(4,1fr);grid-auto-rows:minmax(104px,1fr);
   gap:12px;align-content:start;padding-right:4px;}
-.tm-cc-card{display:flex;align-items:flex-start;gap:14px;background:#fff;border:1px solid var(--line);
+.tm-cc-card{display:flex;align-items:stretch;gap:14px;background:#fff;border:1px solid var(--line);
   border-left:4px solid var(--c);border-radius:13px;padding:14px 16px;min-width:0;
   box-shadow:0 2px 8px color-mix(in srgb,var(--navy) 4%,transparent);transition:.18s;}
 .tm-cc-card:hover{transform:translateY(-2px);box-shadow:0 10px 22px color-mix(in srgb,var(--navy) 10%,transparent);border-color:var(--c);}
 .tm-cc-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}
 /* Fixed two-line slot: the pill itself still hugs its text, but the space it
-   occupies is constant, so names and contact rows line up across a row. */
+   occupies is constant, so names line up across a row regardless of whether
+   this card's own branch name wraps to one line or two. */
 .tm-cc-branch{display:flex;align-items:flex-start;min-height:32px;}
 .tm-branch-tag{align-self:flex-start;max-width:100%;border-radius:5px;padding:3px 8px;
   font:700 10px/1.3 'Inter',sans-serif;letter-spacing:.3px;color:var(--c);background:var(--cbg);
   display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .tm-cc-name{font:700 14.5px 'Sora',sans-serif;color:var(--navy);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .tm-cc-role{font-size:11.5px;color:var(--muted);margin:2px 0 0;}
+/* When a neighbouring card's branch name wraps to two lines it stretches the
+   whole row; without this, a card with a short one-line name ends up with a
+   dead patch of white space under its icons. Pinning the icons to the bottom
+   instead means the extra space collects in one natural spot (between name
+   and icons) rather than looking like an unfinished card. */
+.tm-cc-card .tm-contacts{margin-top:auto;}
 
 .tm-contacts{display:flex;gap:7px;flex-wrap:wrap;}
 .tm-ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;

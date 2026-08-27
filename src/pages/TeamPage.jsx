@@ -285,12 +285,15 @@ function HofPhoto({ member, color }) {
   );
 }
 
-// sessionStart is the authoritative field for ordering, but if a record only
-// carries the display label (e.g. "2025–26") — as older entries might — fall
-// back to parsing the leading year out of that string instead of trusting
-// whatever order the API happened to return.
+// sessionStart is the authoritative field for ordering, but the API sends
+// -1 as a sentinel when it couldn't parse a year (see apiBridge's
+// shapeHallOfFame) — that's not a real year and must not win the "is this a
+// number" check below, or every such record silently sinks to the bottom
+// even when its session text (e.g. "2022–23") is actually fine. Only trust
+// a positive sessionStart; otherwise parse the leading year out of the
+// display label instead of trusting whatever order the API happened to return.
 function getSessionYear(p) {
-  if (typeof p.sessionStart === "number") return p.sessionStart;
+  if (typeof p.sessionStart === "number" && p.sessionStart > 0) return p.sessionStart;
   const match = /\d{4}/.exec(p.session || "");
   return match ? parseInt(match[0], 10) : -Infinity;
 }
