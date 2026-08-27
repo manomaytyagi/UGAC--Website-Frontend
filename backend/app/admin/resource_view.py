@@ -1,10 +1,12 @@
 from starlette.requests import Request
 from sqladmin import ModelView
 
+from app.admin._cache_mixin import CacheInvalidatingAdmin
+
 from app.models import Resource
 
 
-class ResourceAdmin(ModelView, model=Resource):
+class ResourceAdmin(CacheInvalidatingAdmin, ModelView, model=Resource):
     def is_accessible(self, request: Request) -> bool:
         return request.session.get("admin",False)
     column_list = [
@@ -22,3 +24,4 @@ class ResourceAdmin(ModelView, model=Resource):
     name = "Resource"
     name_plural = "Resources"
     icon = "fa-solid fa-folder-open"
+    invalidate_patterns = ("resources:list:*",)

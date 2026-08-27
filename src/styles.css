@@ -50,7 +50,7 @@ button {
 .site-nav {
   position: fixed;
   inset: 0 0 auto;
-  z-index: 100;
+  z-index: 1000;
   background: rgba(247, 248, 243, 0.78);
   border-bottom: 1px solid rgba(18, 55, 42, 0.08);
   backdrop-filter: blur(18px);
@@ -218,12 +218,48 @@ button {
   transform: translateY(-7px) rotate(-45deg);
 }
 
+.mobile-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 998;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s;
+}
+
+.mobile-menu-backdrop--open {
+  opacity: 1;
+  visibility: visible;
+}
+
 .mobile-menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: auto;
+  bottom: 0;
+  width: min(300px, 80dvw);
+  height: 100vh;
+  height: 100dvh;
+  background: var(--white);
+  z-index: 999;
   display: flex;
   flex-direction: column;
-  padding: 8px 22px 20px;
-  background: rgba(255, 255, 255, 0.98);
-  border-top: 1px solid var(--line);
+  padding: 80px 24px 24px;
+  box-shadow: -10px 0 30px rgba(17, 24, 39, 0.12);
+  
+  /* Slide transition */
+  transform: translateX(100%);
+  visibility: hidden;
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, visibility 0.3s;
+}
+
+.mobile-menu--open {
+  transform: translateX(0);
+  visibility: visible;
+  opacity: 1;
 }
 
 .mobile-menu__link {
@@ -1223,12 +1259,12 @@ button {
   }
 
   .site-nav__links {
-    overflow-x: auto;
-    scrollbar-width: none;
+    display: none;
   }
 
-  .site-nav__links::-webkit-scrollbar {
-    display: none;
+  .hamburger {
+    display: flex;
+    z-index: 1001;
   }
 
   .logo-button__title {

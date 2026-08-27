@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     AWS_REGION: str = "ap-south-1"
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
     LOCAL_STORAGE_PATH: str = "./data"
+    # Vercel Blob — powers admin panel image uploads. Set in ECS env/Secrets Manager.
+    BLOB_READ_WRITE_TOKEN: str = ""
+    BLOB_STORE_ID: str = ""
 
 
 settings = Settings()

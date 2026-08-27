@@ -1,10 +1,12 @@
 from starlette.requests import Request
 from sqladmin import ModelView
 
+from app.admin._cache_mixin import CacheInvalidatingAdmin
+
 from app.models import Curriculum
 
 
-class CurriculumAdmin(ModelView, model=Curriculum):
+class CurriculumAdmin(CacheInvalidatingAdmin, ModelView, model=Curriculum):
     def is_accessible(self, request: Request) -> bool:
         return request.session.get("admin",False)
     column_list = [
@@ -32,3 +34,4 @@ class CurriculumAdmin(ModelView, model=Curriculum):
     name = "Curriculum"
     name_plural = "Curricula"
     icon = "fa-solid fa-graduation-cap"
+    invalidate_patterns = ("curricula:*",)

@@ -285,9 +285,24 @@ function HofPhoto({ member, color }) {
   );
 }
 
+// sessionStart is the authoritative field for ordering, but if a record only
+// carries the display label (e.g. "2025–26") — as older entries might — fall
+// back to parsing the leading year out of that string instead of trusting
+// whatever order the API happened to return.
+function getSessionYear(p) {
+  if (typeof p.sessionStart === "number") return p.sessionStart;
+  const match = /\d{4}/.exec(p.session || "");
+  return match ? parseInt(match[0], 10) : -Infinity;
+}
+
 // Past academic secretaries. The session label comes from the backend's
 // batch_year (2025 -> "2025–26"), so the role reads "Academic Secretary · 2025–26".
 function HallOfFameScreen({ people = [] }) {
+  // Most recent tenure first, regardless of the order the API returns.
+  const sorted = useMemo(
+    () => [...people].sort((a, b) => getSessionYear(b) - getSessionYear(a)),
+    [people]
+  );
   return (
     <div className="tm-screen">
       <div className="tm-screen-head">
@@ -295,17 +310,17 @@ function HallOfFameScreen({ people = [] }) {
           <span className="tm-eyebrow tm-eyebrow--orange">Hall of Fame</span>
           <h2 className="tm-screen-title">Past Academic Secretaries</h2>
         </div>
-        <span className="tm-count">{people.length} {people.length === 1 ? "term" : "terms"}</span>
+        <span className="tm-count">{sorted.length} {sorted.length === 1 ? "term" : "terms"}</span>
       </div>
 
-      {people.length === 0 ? (
+      {sorted.length === 0 ? (
         <p className="tm-hof-empty">
           No past secretaries have been added yet. They’ll appear here once the council
           publishes them.
         </p>
       ) : (
         <div className="tm-hof-grid">
-          {people.map((p, i) => {
+          {sorted.map((p, i) => {
             const color = BRANCH_COLORS[i % BRANCH_COLORS.length];
             return (
               <article
@@ -432,8 +447,7 @@ export default function TeamPage({ onExit }) {
         secretary: data.secretary || FALLBACK_SECRETARY,
         branches: safeBranches.length > 0 ? safeBranches : FALLBACK_BRANCHES,
         supportTeams: data.supportTeams?.length > 0 ? data.supportTeams : FALLBACK_SUPPORT_TEAMS,
-        hallOfFame:
-          source === "fallback" ? FALLBACK_HALL_OF_FAME : data.hallOfFame || [],
+        hallOfFame: source === "live" ? (data.hallOfFame || []) : FALLBACK_HALL_OF_FAME,
       });
     });
     return () => { cancelled = true; };

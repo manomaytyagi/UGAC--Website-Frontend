@@ -10,7 +10,8 @@ class TeamMember(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "team_members"
     __table_args__ = (
         CheckConstraint(
-            "type IN ('council', 'faculty', 'secretary', 'support')", name="ck_team_member_type"
+            "type IN ('council', 'faculty', 'secretary', 'support', 'hall_of_fame')",
+            name="ck_team_member_type",
         ),
     )
 
@@ -25,6 +26,10 @@ class TeamMember(UUIDMixin, TimestampMixin, Base):
     council_session: Mapped[str | None] = mapped_column(String(20), nullable=True)
     branch_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     batch_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    roll_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    instagram: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    signature_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     team_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     term_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     term_end: Mapped[date | None] = mapped_column(Date, nullable=True)

@@ -52,7 +52,10 @@ async def create_review(
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ):
-    await verify_hcaptcha(data.h_captcha_token, remote_ip=request.client.host)
+    # request.client is None under some ASGI servers — don't 500 on it.
+    await verify_hcaptcha(
+        data.h_captcha_token, remote_ip=request.client.host if request.client else None
+    )
     return await crud.create(db, data, redis=redis)
 
 

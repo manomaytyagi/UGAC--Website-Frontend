@@ -1,11 +1,13 @@
 from starlette.requests import Request
 from sqladmin import ModelView
+
+from app.admin._cache_mixin import CacheInvalidatingAdmin
 from wtforms import SelectField
 
 from app.models import CourseReview
 
 
-class CourseReviewAdmin(ModelView, model=CourseReview):
+class CourseReviewAdmin(CacheInvalidatingAdmin, ModelView, model=CourseReview):
     def is_accessible(self, request: Request) -> bool:
         return request.session.get("admin",False)
     column_list = [
@@ -45,3 +47,4 @@ class CourseReviewAdmin(ModelView, model=CourseReview):
     name = "Course Review"
     name_plural = "Course Reviews"
     icon = "fa-solid fa-star"
+    invalidate_patterns = ("reviews:list:*", "reviews:by_course:*",)

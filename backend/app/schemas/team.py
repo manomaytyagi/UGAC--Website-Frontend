@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class TeamMemberCreate(BaseModel):
     name: str = Field(max_length=200)
     role: str = Field(max_length=200)
-    type: str = Field(max_length=30, pattern="^(council|faculty|secretary|support)$")
+    type: str = Field(max_length=30, pattern="^(council|faculty|secretary|support|hall_of_fame)$")
     email: str | None = Field(default=None, max_length=200)
     photo_url: str | None = Field(default=None, max_length=500)
     bio: str | None = None
@@ -16,6 +16,10 @@ class TeamMemberCreate(BaseModel):
     council_session: str | None = Field(default=None, max_length=20)
     branch_code: str | None = Field(default=None, max_length=20)
     batch_year: int | None = Field(default=None, ge=2000, le=2100)
+    roll_number: str | None = Field(default=None, max_length=20)
+    phone: str | None = Field(default=None, max_length=20)
+    instagram: str | None = Field(default=None, max_length=200)
+    signature_url: str | None = Field(default=None, max_length=500)
     team_name: str | None = Field(default=None, max_length=200)
     term_start: date | None = None
     term_end: date | None = None
@@ -27,7 +31,7 @@ class TeamMemberCreate(BaseModel):
 class TeamMemberUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     role: str | None = Field(default=None, max_length=200)
-    type: str | None = Field(default=None, max_length=30, pattern="^(council|faculty|secretary|support)$")
+    type: str | None = Field(default=None, max_length=30, pattern="^(council|faculty|secretary|support|hall_of_fame)$")
     email: str | None = Field(default=None, max_length=200)
     photo_url: str | None = Field(default=None, max_length=500)
     bio: str | None = None
@@ -36,6 +40,10 @@ class TeamMemberUpdate(BaseModel):
     council_session: str | None = Field(default=None, max_length=20)
     branch_code: str | None = Field(default=None, max_length=20)
     batch_year: int | None = Field(default=None, ge=2000, le=2100)
+    roll_number: str | None = Field(default=None, max_length=20)
+    phone: str | None = Field(default=None, max_length=20)
+    instagram: str | None = Field(default=None, max_length=200)
+    signature_url: str | None = Field(default=None, max_length=500)
     team_name: str | None = Field(default=None, max_length=200)
     term_start: date | None = None
     term_end: date | None = None

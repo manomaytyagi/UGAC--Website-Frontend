@@ -29,6 +29,15 @@ class Curriculum(UUIDMixin, TimestampMixin, Base):
     extra_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     branch = relationship("Branch", back_populates="curricula")
+    curriculum_courses = relationship(
+        "CurriculumCourse", back_populates="curriculum", cascade="all, delete-orphan"
+    )
+    elective_baskets = relationship(
+        "ElectiveBasket", back_populates="curriculum", cascade="all, delete-orphan"
+    )
+
+    def __str__(self):
+        return f"{self.name} ({self.batch_year})"
 
 
 class CurriculumCourse(TimestampMixin, Base):
@@ -51,9 +60,13 @@ class CurriculumCourse(TimestampMixin, Base):
     semester: Mapped[int] = mapped_column(Integer, nullable=False)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_optional: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    pdf_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     basket_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("elective_baskets.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    curriculum = relationship("Curriculum", back_populates="curriculum_courses")
+    course = relationship("Course", back_populates="curriculum_entries")
+    basket = relationship("ElectiveBasket", back_populates="courses")
 
 
 class ElectiveBasket(UUIDMixin, TimestampMixin, Base):
@@ -66,3 +79,6 @@ class ElectiveBasket(UUIDMixin, TimestampMixin, Base):
     min_credits: Mapped[int] = mapped_column(Integer, nullable=False)
     max_credits: Mapped[int] = mapped_column(Integer, nullable=False)
     semester: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    curriculum = relationship("Curriculum", back_populates="elective_baskets")
+    courses = relationship("CurriculumCourse", back_populates="basket")
+    

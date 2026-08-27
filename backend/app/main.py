@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from asyncpg.exceptions import CheckViolationError, ForeignKeyViolationError, UniqueViolationError
 from fastapi import Depends, FastAPI, Request
@@ -8,8 +9,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from sqladmin import Admin
-from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -28,6 +27,7 @@ from app.admin import (
     ResourceAdmin,
     TeamMemberAdmin,
 )
+from app.admin._string_url_file_admin import StringUrlFileAdmin
 from app.api.v1 import api_router, register_routers
 from app.config import settings
 from app.core.admin_auth import AdminAuth
@@ -35,16 +35,25 @@ from app.core.api_auth import write_guard
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.rate_limit import limiter
 from app.core.storage import _s3_client
-from app.database import close_redis, engine, init_redis
+from app.database import close_redis, engine, init_redis, sync_engine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ugac")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_redis()
+    await _ensure_storage_bucket()
+    yield
+    await close_redis()
 
 
 app = FastAPI(
     title="UGAC API",
     description="UG Academic Council — IIT Mandi",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Middleware order (request entry path):
@@ -67,9 +76,7 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 auth_backend = AdminAuth(secret_key=settings.SECRET_KEY)
-sync_db_url = settings.DATABASE_URL.replace("+asyncpg", "").replace("ssl=", "sslmode=")
-sync_engine = create_engine(sync_db_url, echo=False, pool_size=5, max_overflow=10)
-admin = Admin(app, sync_engine, authentication_backend=auth_backend)
+admin = StringUrlFileAdmin(app, sync_engine, authentication_backend=auth_backend)
 admin.add_model_view(AnnouncementAdmin)
 admin.add_model_view(BranchAdmin)
 admin.add_model_view(CourseAdmin)
@@ -87,13 +94,7 @@ register_routers()
 app.include_router(api_router, dependencies=[Depends(write_guard)])
 
 
-@app.on_event("startup")
-async def on_startup():
-    await init_redis()
-
-
-@app.on_event("startup")
-async def ensure_storage_bucket():
+async def _ensure_storage_bucket():
     if settings.STORAGE_ENDPOINT == "local":
         os.makedirs(settings.LOCAL_STORAGE_PATH, exist_ok=True)
         logger.info("Using local storage: %s", settings.LOCAL_STORAGE_PATH)
@@ -142,8 +143,3 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    await close_redis()

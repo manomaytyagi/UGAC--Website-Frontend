@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import shutil
@@ -7,6 +8,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 import aioboto3
+import vercel_blob
 from botocore.exceptions import ClientError
 
 from app.config import settings
@@ -16,13 +18,66 @@ logger = logging.getLogger("ugac.storage")
 _session = aioboto3.Session()
 
 
+def _check_key(key: str) -> str:
+    """Reject storage keys that try to climb out of the namespace.
+
+    Applies to BOTH backends. The local branch needs it because the key becomes a
+    filesystem path; the S3 branch needs it because botocore does not normalise the
+    key, so "../.." lands verbatim in the request line
+    (http://minio:9000/bucket/../../etc/passwd) where a proxy or the object store
+    may resolve it and escape the bucket.
+
+    `key` arrives straight from the `{key:path}` route param and GET /storage/file/
+    is a read, so it is not behind write_guard — this is the only gate.
+    """
+    if not key or key.startswith("/") or "\\" in key:
+        raise ValueError(f"Invalid storage key: {key!r}")
+    if any(part in ("..", "") for part in key.split("/")):
+        raise ValueError(f"Refusing storage key outside the storage root: {key!r}")
+    return key
+
+
 def _local_path(key: str) -> Path:
-    return Path(settings.LOCAL_STORAGE_PATH) / key
+    """Resolve `key` under LOCAL_STORAGE_PATH, refusing anything that escapes it.
+
+    Belt-and-braces behind _check_key: that rejects the traversal syntactically,
+    this confirms the resolved path really lands inside the root (symlinks included).
+    """
+    _check_key(key)
+    base = Path(settings.LOCAL_STORAGE_PATH).resolve()
+    target = (base / key).resolve()
+    if target != base and base not in target.parents:
+        raise ValueError(f"Refusing storage key outside the storage root: {key!r}")
+    return target
 
 
 def _use_s3() -> bool:
     # Only "local" routes to disk. "" = AWS S3 native; any URL = S3/MinIO endpoint.
     return settings.STORAGE_ENDPOINT != "local"
+
+
+def _blob_configured() -> bool:
+    return bool(os.environ.get("BLOB_READ_WRITE_TOKEN"))
+
+
+async def upload_to_blob(content: bytes, pathname: str, content_type: str | None = None) -> str:
+    """Upload bytes to Vercel Blob and return the public URL."""
+    if not _blob_configured():
+        raise RuntimeError("BLOB_READ_WRITE_TOKEN is not set")
+    options = {"access": "public", "addRandomSuffix": "true"}
+    if content_type:
+        options["contentType"] = content_type
+    resp = await asyncio.to_thread(vercel_blob.put, pathname, content, options)
+    logger.info("Uploaded blob → %s", resp["url"])
+    return resp["url"]
+
+
+async def delete_from_blob(url: str) -> None:
+    try:
+        await asyncio.to_thread(vercel_blob.delete, url)
+        logger.info("Deleted blob %s", url)
+    except Exception:
+        logger.exception("Failed to delete blob %s", url)
 
 
 def _is_aws_native() -> bool:
@@ -47,6 +102,7 @@ async def upload_fileobj(
     key: str,
     bucket: str | None = None,
 ) -> str:
+    _check_key(key)
     if _use_s3():
         bucket = bucket or settings.STORAGE_BUCKET
         async with _s3_client() as s3:
@@ -66,6 +122,7 @@ async def upload_file(
     key: str,
     bucket: str | None = None,
 ) -> str:
+    _check_key(key)
     if _use_s3():
         bucket = bucket or settings.STORAGE_BUCKET
         async with _s3_client() as s3:
@@ -83,6 +140,7 @@ async def download_fileobj(
     key: str,
     bucket: str | None = None,
 ) -> bytes:
+    _check_key(key)
     if _use_s3():
         bucket = bucket or settings.STORAGE_BUCKET
         async with _s3_client() as s3:
@@ -100,6 +158,7 @@ async def download_file(
     dest: str | Path,
     bucket: str | None = None,
 ) -> Path:
+    _check_key(key)
     dest = Path(dest)
     if _use_s3():
         bucket = bucket or settings.STORAGE_BUCKET
@@ -139,6 +198,7 @@ async def list_objects(
 
 
 async def delete_object(key: str, bucket: str | None = None) -> bool:
+    _check_key(key)
     if _use_s3():
         bucket = bucket or settings.STORAGE_BUCKET
         async with _s3_client() as s3:
@@ -159,6 +219,7 @@ async def delete_object(key: str, bucket: str | None = None) -> bool:
 
 
 async def object_exists(key: str, bucket: str | None = None) -> bool:
+    _check_key(key)
     if _use_s3():
         bucket = bucket or settings.STORAGE_BUCKET
         async with _s3_client() as s3:
@@ -176,6 +237,7 @@ async def get_presigned_url(
     expiration: int = 3600,
     bucket: str | None = None,
 ) -> str | None:
+    _check_key(key)
     if _use_s3():
         bucket = bucket or settings.STORAGE_BUCKET
         async with _s3_client() as s3:

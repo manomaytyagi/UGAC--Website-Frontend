@@ -7,7 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class CourseReviewCreate(BaseModel):
     course_id: uuid.UUID
     rating: int = Field(ge=1, le=5)
-    review_text: str
+    # Bounded: POST /reviews/ is public and the column is Text, so an unbounded
+    # body is a storage-exhaustion path even at 10 req/min.
+    review_text: str = Field(min_length=1, max_length=5000)
     semester_taken: str | None = Field(default=None, max_length=20)
     h_captcha_token: str
 

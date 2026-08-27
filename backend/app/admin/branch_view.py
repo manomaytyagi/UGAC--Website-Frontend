@@ -1,10 +1,12 @@
 from starlette.requests import Request
 from sqladmin import ModelView
 
+from app.admin._cache_mixin import CacheInvalidatingAdmin
+
 from app.models import Branch
 
 
-class BranchAdmin(ModelView, model=Branch):
+class BranchAdmin(CacheInvalidatingAdmin, ModelView, model=Branch):
     def is_accessible(self, request: Request) -> bool:
         return request.session.get("admin",False)
     column_list = [
@@ -23,3 +25,4 @@ class BranchAdmin(ModelView, model=Branch):
     name = "Branch"
     name_plural = "Branches"
     icon = "fa-solid fa-code-branch"
+    invalidate_patterns = ("branches:list:*",)

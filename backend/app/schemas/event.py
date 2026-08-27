@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class EventCreate(BaseModel):
@@ -64,3 +66,23 @@ class EventRead(BaseModel):
     tags: list[str]
     created_at: datetime
     updated_at: datetime
+
+    # Both columns are JSONB, so the DB accepts any JSON value. The admin panel
+    # maps them to a JSONField that stores None for an empty box and a bare
+    # scalar for unbracketed input, and a server_default only fires when the
+    # column is omitted — so a row can hold null, "Workshop", or {"a": 1}.
+    # Serialisation runs per row inside the list response, so without this one
+    # bad row 500s /events/ for every visitor instead of degrading just itself.
+    @field_validator("documents", mode="before")
+    @classmethod
+    def _coerce_documents(cls, v: Any) -> list[dict]:
+        if not isinstance(v, list):
+            return []
+        return [d for d in v if isinstance(d, dict)]
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _coerce_tags(cls, v: Any) -> list[str]:
+        if not isinstance(v, list):
+            return []
+        return [t for t in v if isinstance(t, str)]

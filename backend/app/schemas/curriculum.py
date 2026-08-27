@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.branch import BranchRead
 
+
 class CurriculumCreate(BaseModel):
     name: str = Field(max_length=300)
     batch_year: int = Field(ge=2000, le=2100)
@@ -71,6 +72,7 @@ class CurriculumCourseCreate(BaseModel):
     category: str | None = Field(default=None, max_length=50)
     is_optional: bool = False
     basket_id: uuid.UUID | None = None
+    pdf_link: str | None = None
 
 
 class CurriculumCourseRead(BaseModel):
@@ -83,6 +85,7 @@ class CurriculumCourseRead(BaseModel):
     category: str | None
     is_optional: bool
     basket_id: uuid.UUID | None
+    pdf_link: str | None = None
     created_at: datetime
     updated_at: datetime
 

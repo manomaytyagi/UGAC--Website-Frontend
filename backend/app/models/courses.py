@@ -24,7 +24,10 @@ class Course(UUIDMixin, TimestampMixin, Base):
 
     department = relationship("Department", back_populates="courses")
     reviews = relationship("CourseReview", back_populates="course")
+    curriculum_entries = relationship("CurriculumCourse", back_populates="course")
 
+    def __str__(self):
+        return self.code
 
 class CoursePrerequisite(Base):
     __tablename__ = "course_prerequisites"

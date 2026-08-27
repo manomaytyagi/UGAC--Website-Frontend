@@ -20,7 +20,7 @@ def _is_public_write(method: str, path: str) -> bool:
     moderated from the admin panel. Everything else requires admin credentials.
     """
     p = path.rstrip("/")
-    return method == "POST" and path.rstrip("/") == "/api/v1/reviews"
+    return method == "POST" and p == "/api/v1/reviews"
 
 
 async def write_guard(request: Request) -> None:

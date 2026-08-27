@@ -47,11 +47,25 @@ function FlowNode({ node, active, onClick, register }) {
   const cls = (base) =>
     `uc-fc-node ${base}${active ? " is-active" : ""}${clickable ? " is-click" : ""}`;
 
+  // Space must be swallowed — on a role="button" the browser still scrolls the
+  // page on keydown, so activating a node by keyboard also jumped the view.
+  const activation = clickable
+    ? {
+        onClick,
+        role: "button",
+        tabIndex: 0,
+        onKeyDown: (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        },
+      }
+    : {};
+
   if (node.kind === "decision") {
     return (
-      <div ref={register} className={cls("uc-fc-diamond")} onClick={onClick}
-           role={clickable ? "button" : undefined} tabIndex={clickable ? 0 : undefined}
-           onKeyDown={clickable ? (e) => (e.key === "Enter" || e.key === " ") && onClick() : undefined}>
+      <div ref={register} className={cls("uc-fc-diamond")} {...activation}>
         <span className="uc-fc-diamond-bg"
               style={{ background: meta.bg, borderColor: meta.accent }} />
         <span className="uc-fc-diamond-label">{node.short}</span>
@@ -61,9 +75,7 @@ function FlowNode({ node, active, onClick, register }) {
 
   if (node.kind === "start") {
     return (
-      <div ref={register} className={cls("uc-fc-start")} onClick={onClick}
-           role={clickable ? "button" : undefined} tabIndex={clickable ? 0 : undefined}
-           onKeyDown={clickable ? (e) => (e.key === "Enter" || e.key === " ") && onClick() : undefined}>
+      <div ref={register} className={cls("uc-fc-start")} {...activation}>
         {node.title}
       </div>
     );

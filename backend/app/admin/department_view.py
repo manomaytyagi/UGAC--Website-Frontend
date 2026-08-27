@@ -1,10 +1,12 @@
 from starlette.requests import Request
 from sqladmin import ModelView
 
+from app.admin._cache_mixin import CacheInvalidatingAdmin
+
 from app.models import Department
 
 
-class DepartmentAdmin(ModelView, model=Department):
+class DepartmentAdmin(CacheInvalidatingAdmin, ModelView, model=Department):
     def is_accessible(self, request: Request) -> bool:
         return request.session.get("admin",False)
     column_list = [
@@ -21,3 +23,4 @@ class DepartmentAdmin(ModelView, model=Department):
     name = "Department"
     name_plural = "Departments"
     icon = "fa-solid fa-building"
+    invalidate_patterns = ("departments:list:*",)

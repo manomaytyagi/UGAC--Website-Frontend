@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: ugac-api
+    runtime: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_TOKEN
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: ugac_admin
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: HCAPTCHA_SECRET_KEY
+        sync: false
+      # Trust only Render's internal LB (private space). NOT "*" or 0.0.0.0/0 —
+      # those make X-Forwarded-For client-controlled, which would let anyone
+      # bypass the slowapi rate limit and forge the hCaptcha remote_ip.
+      - key: TRUST_PROXY_CIDR
+        value: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fd00::/8"
+      # "" = S3 native. Deliberately not "local": Render's free disk is wiped on
+      # every deploy and spin-down. Admin images go to Vercel Blob instead; the
+      # /storage/* routes stay unconfigured until real S3 creds are added.
+      - key: STORAGE_ENDPOINT
+        value: ""
+      - key: BLOB_READ_WRITE_TOKEN
+        sync: false
+      - key: BLOB_STORE_ID
+        sync: false
+      - key: CORS_ORIGINS
+        value: '["https://ugac.iitmandi.ac.in","https://ugac-website-frontend.vercel.app"]'
