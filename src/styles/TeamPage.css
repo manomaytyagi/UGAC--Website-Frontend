@@ -91,7 +91,12 @@
 .tm-branch-tag{align-self:flex-start;max-width:100%;border-radius:5px;padding:3px 8px;
   font:700 10px/1.3 'Inter',sans-serif;letter-spacing:.3px;color:var(--c);background:var(--cbg);
   display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-.tm-cc-name{font:700 14.5px 'Sora',sans-serif;color:var(--navy);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* flex-shrink:0 matters here: overflow:hidden (needed for the ellipsis)
+   removes this element's automatic minimum size in a flex column, so
+   without it, whenever the row is squeezed shorter than the full card's
+   content needs, the name silently shrinks to 0 height and disappears
+   before its siblings give up any space. */
+.tm-cc-name{font:700 14.5px 'Sora',sans-serif;color:var(--navy);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;}
 .tm-cc-role{font-size:11.5px;color:var(--muted);margin:2px 0 0;}
 /* When a neighbouring card's branch name wraps to two lines it stretches the
    whole row; without this, a card with a short one-line name ends up with a
