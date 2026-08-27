@@ -13,6 +13,14 @@ const TAG_COLORS = {
 };
 const tagStyle = (tag) => TAG_COLORS[tag] || TAG_COLORS["Other"];
 
+/* Labels for the media toggle in the details modal. Keys double as the
+   media-tab ids, so adding a medium means adding one entry here. */
+const MEDIA_LABELS = {
+  video:   "▶ Recording",
+  canva:   "🖼 Slides",
+  gallery: "📷 Gallery",
+};
+
 const FALLBACK = {
   upcoming: [],
   past: [],
@@ -60,6 +68,53 @@ function toCanvaEmbed(url) {
   if (url.includes("?embed") || url.includes("&embed")) return url;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}embed`;
+}
+
+/* ── Google Drive ────────────────────────────────────────────────────
+   Two things get pulled from Drive: a folder of photos (the gallery)
+   and a single video file (the recording). Both are iframe-able, but
+   only via Drive's own embed URLs, so the share link an admin pastes
+   has to be rewritten first.
+
+   Admins paste whatever the Drive "Share" button gave them, so accept
+   every shape it hands out — plus a bare ID, in case someone trims it.
+
+   NOTE: both require the item to be shared as "Anyone with the link";
+   a restricted file renders as a Drive sign-in wall inside the frame. */
+const DRIVE_FILE_PATTERNS = [
+  /\/file\/d\/([-\w]{10,})/,     // .../file/d/ID/view
+  /\/d\/([-\w]{10,})/,           // .../d/ID
+  /[?&]id=([-\w]{10,})/,         // ...open?id=ID , ...uc?id=ID
+];
+const DRIVE_FOLDER_PATTERNS = [
+  /\/folders\/([-\w]{10,})/,     // .../drive/folders/ID , .../drive/u/0/folders/ID
+  /[?&]id=([-\w]{10,})/,         // ...folderview?id=ID
+];
+
+function driveId(url, patterns) {
+  const s = String(url || "").trim();
+  if (!s) return "";
+  for (const re of patterns) {
+    const m = s.match(re);
+    if (m) return m[1];
+  }
+  return /^[-\w]{10,}$/.test(s) ? s : "";   // already a bare ID
+}
+
+/** Share link → the player Drive will serve inside an iframe. */
+function toDriveVideoEmbed(url) {
+  if (!url) return "";
+  if (/\/preview(\?|#|$)/.test(url)) return url;
+  const id = driveId(url, DRIVE_FILE_PATTERNS);
+  return id ? `https://drive.google.com/file/d/${id}/preview` : "";
+}
+
+/** Folder link → Drive's embeddable grid view of that folder. */
+function toDriveFolderEmbed(url) {
+  if (!url) return "";
+  if (/embeddedfolderview/i.test(url)) return url;
+  const id = driveId(url, DRIVE_FOLDER_PATTERNS);
+  return id ? `https://drive.google.com/embeddedfolderview?id=${id}#grid` : "";
 }
 
 function EventBanner({ bannerKey, title, variant = "full" }) {
@@ -188,10 +243,14 @@ function UpcomingCard({ event }) {
 
 function PastEventCard({ event, onOpen }) {
   const ts = tagStyle(event.tag);
-  const hasVideo = !!event.youtube_url;
-  const hasCanva = !!event.canva_url;
+  // A recording can come from YouTube or from a video file on Drive.
+  // Resolved the same way the modal does, so a malformed Drive link never
+  // advertises a chip for a tab that won't render.
+  const hasVideo   = !!(toYouTubeEmbed(event.youtube_url) || toDriveVideoEmbed(event.drive_video_url));
+  const hasCanva   = !!event.canva_url;
+  const hasGallery = !!toDriveFolderEmbed(event.drive_gallery_url);
   const docCount = event.documents ? event.documents.length : 0;
-  const hasDetails = hasVideo || hasCanva || docCount > 0;
+  const hasDetails = hasVideo || hasCanva || hasGallery || docCount > 0;
 
   return (
     <article className="uc-past-card">
@@ -211,6 +270,7 @@ function PastEventCard({ event, onOpen }) {
           <div className="uc-past-chips">
             {hasVideo && <span className="uc-past-chip">▶ Recording</span>}
             {hasCanva && <span className="uc-past-chip">🖼 Slides</span>}
+            {hasGallery && <span className="uc-past-chip">📷 Gallery</span>}
             {docCount > 0 && (
               <span className="uc-past-chip">📎 {docCount} {docCount === 1 ? "file" : "files"}</span>
             )}
@@ -264,12 +324,27 @@ function PastCardSkeleton() {
 
 function EventDetailsModal({ event, onClose }) {
   const isMobile = useIsMobile();
-  const hasVideo = !!event.youtube_url;
-  const hasCanva = !!event.canva_url;
-  const docs     = event.documents || [];
+  const docs = event.documents || [];
 
-  // Only one medium is shown at a time. Default to the video when present.
-  const [mediaTab, setMediaTab] = useState(hasVideo ? "video" : "canva");
+  /* Each medium resolves to the URL its iframe actually needs. A recording
+     may live on YouTube or as a file on Drive; YouTube wins if both are set,
+     since it streams better. An unparseable Drive link yields "" and the tab
+     simply doesn't appear, rather than rendering a broken frame. */
+  const videoSrc   = toYouTubeEmbed(event.youtube_url) || toDriveVideoEmbed(event.drive_video_url);
+  const gallerySrc = toDriveFolderEmbed(event.drive_gallery_url);
+
+  const hasVideo   = !!videoSrc;
+  const hasCanva   = !!event.canva_url;
+  const hasGallery = !!gallerySrc;
+
+  // Only one medium is shown at a time; order here is the tab order.
+  const tabs = [
+    hasVideo   && "video",
+    hasCanva   && "canva",
+    hasGallery && "gallery",
+  ].filter(Boolean);
+
+  const [mediaTab, setMediaTab] = useState(tabs[0] || null);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -297,17 +372,17 @@ function EventDetailsModal({ event, onClose }) {
           <button style={S.modalClose} onClick={onClose} aria-label="Close">✕</button>
         </div>
 
-        {/* Toggle — only when both media exist (one visible at a time) */}
-        {hasVideo && hasCanva && (
+        {/* Toggle — only worth showing once there's more than one medium */}
+        {tabs.length > 1 && (
           <div style={S.mediaToggle}>
-            <button
-              style={{ ...S.mediaToggleBtn, ...(mediaTab === "video" ? S.mediaToggleActive : {}) }}
-              onClick={() => setMediaTab("video")}
-            >▶ Recording</button>
-            <button
-              style={{ ...S.mediaToggleBtn, ...(mediaTab === "canva" ? S.mediaToggleActive : {}) }}
-              onClick={() => setMediaTab("canva")}
-            >🖼 Slides</button>
+            {tabs.map(id => (
+              <button
+                key={id}
+                style={{ ...S.mediaToggleBtn, ...(mediaTab === id ? S.mediaToggleActive : {}) }}
+                onClick={() => setMediaTab(id)}
+                aria-pressed={mediaTab === id}
+              >{MEDIA_LABELS[id]}</button>
+            ))}
           </div>
         )}
 
@@ -317,7 +392,7 @@ function EventDetailsModal({ event, onClose }) {
             <div style={S.embedWrap}>
               <iframe
                 style={S.embedFrame}
-                src={toYouTubeEmbed(event.youtube_url)}
+                src={videoSrc}
                 title={`${event.title} — recording`}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 referrerPolicy="strict-origin-when-cross-origin"
@@ -346,6 +421,30 @@ function EventDetailsModal({ event, onClose }) {
                 />
               </div>
             )
+          )}
+
+          {/* Gallery — Drive's own folder grid. Thumbnails and filenames are
+              rendered by Drive, so nothing here needs a per-photo fetch. It's
+              a scrollable panel rather than a 16:9 box because the grid grows
+              downward with the number of photos. */}
+          {mediaTab === "gallery" && hasGallery && (
+            <>
+              <div style={{ ...S.galleryWrap, height: isMobile ? 320 : 440 }}>
+                <iframe
+                  style={S.embedFrame}
+                  src={gallerySrc}
+                  title={`${event.title} — photo gallery`}
+                  loading="lazy"
+                />
+              </div>
+              <a
+                href={event.drive_gallery_url}
+                target="_blank" rel="noopener noreferrer"
+                style={S.galleryOpenLink}
+              >
+                📷 Open full gallery in Drive ↗
+              </a>
+            </>
           )}
         </div>
 
@@ -779,6 +878,19 @@ const S = {
     background: C.orange, color: C.white, textDecoration: "none",
     borderRadius: 12, padding: "20px", fontSize: 14, fontWeight: 700,
   },
+  /* The folder grid scrolls inside a fixed panel — height is set inline
+     from the isMobile hook, since this box can't use a media query. */
+  galleryWrap: {
+    position: "relative", width: "100%",
+    background: C.offWhite, border: `1px solid ${C.border}`,
+    borderRadius: 12, overflow: "hidden",
+  },
+  galleryOpenLink: {
+    display: "inline-block", marginTop: 10,
+    fontSize: 12.5, fontWeight: 700, color: C.navyMid,
+    textDecoration: "none",
+  },
+
   docsSection: { padding: "18px 24px 24px" },
   docsHeading: {
     fontSize: 12, fontWeight: 700, letterSpacing: 1,

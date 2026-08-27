@@ -575,6 +575,10 @@ function shapeEvent(row) {
     report_key: pick(row, "report_key"),
     youtube_url: pick(row, "youtube_url"),
     canva_url: pick(row, "canva_url"),
+    drive_video_url: pick(row, "drive_video_url", "recording_url", "video_url"),
+    drive_gallery_url: pick(
+      row, "drive_gallery_url", "gallery_url", "photos_url", "drive_folder_url"
+    ),
     documents: shapeDocuments(row.documents),
     tags,
     tag: tags.length ? titleCase(tags[0]) : "Event",
