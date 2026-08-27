@@ -19,6 +19,7 @@ const FLOW = {
   getOffer: {
     kind: "action",
     title: "Get Offer Letter",
+    meta: ["⏰ Off-campus internship? Report it to CnP within 5 working days of the offer letter being issued."],
     body: "Secure the official offer letter — you'll attach it at later steps.",
     next: "duration",
   },
@@ -37,9 +38,22 @@ const FLOW = {
     kind: "action",
     title: "Inform Faculty Advisor (FA)",
     body: "Just keep your FA in the loop — no further academic approval needed.",
+    next: "cnpNocShort",
+  },
+
+  cnpNocShort: {
+    kind: "email",
+    title: "NOC from CnP",
+    meta: ["For a 2-month internship the NOC comes from CnP — not the Academic Office."],
+    emails: [
+      { label: "To", addr: "cnpoffice@iitmandi.ac.in" },
+      { label: "Cc", addr: "cnpcell@iitmandi.ac.in" },
+    ],
+    attachments: ["Offer Letter"],
     next: "doneVacation",
   },
-  doneVacation: { kind: "done", title: "Done", body: "All set for your vacation internship." },
+
+  doneVacation: { kind: "done", title: "Done", body: "NOC in hand — all set for your vacation internship." },
 
   faApproval: {
     kind: "action",
@@ -51,9 +65,9 @@ const FLOW = {
   cnp: {
     kind: "email",
     title: "CNP Approval",
-    meta: ["Assistant Registrar — Shubham Sir"],
+    meta: ["CnP Office"],
     emails: [
-      { label: "To", addr: "arcnp@iitmandi.ac.in" },
+      { label: "To", addr: "cnpoffice@iitmandi.ac.in" },
       { label: "Cc", addr: "cnpcell@iitmandi.ac.in" },
     ],
     next: "noc",
