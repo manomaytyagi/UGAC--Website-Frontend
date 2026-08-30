@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/apiBridge.js";
+import { api, semesterCredits } from "../lib/apiBridge.js";
 import { COLORS as C } from "../styles/colors.js";
 import "../styles/CurriculumPage.css";
 
@@ -32,7 +32,7 @@ const BRANCH_META = {
   DSE:  { name: "Data Science and Engineering",                   color: "#2a3f6e" },  
   QSE:   { name: "Quantum Science and Engineering",                color: "#b03a42" },  
   AE:   { name: "Agricultural Engineering with Data Analytics",   color: "#1d4d38" },  
-  CEDA: { name: "Chemical Engineering with Data Analytics",       color: "#7a4a1e" },  
+  CHE:  { name: "Chemical Engineering",                           color: "#7a4a1e" },  
 };
 
 const FALLBACK_BRANCHES = Object.entries(BRANCH_META).map(([code, m]) => ({
@@ -337,14 +337,15 @@ function CouncilEmblem({ branches, onPick, reduce, big, onHover }) {
 }
 
 
-/* GE specialisation options */
+/* GE specialisation options, as published in the compiled curriculum.
+   Fintech and Open Specialisation only exist from the 2024 batch onwards; the
+   batch tabs narrow themselves once a specialisation is picked. */
 const GE_SPECIALISATIONS = [
-  { code: "GE-CS",   name: "Computer Science" },
-  { code: "GE-EE",   name: "Electrical Engineering" },
-  { code: "GE-ME",   name: "Mechanical Engineering" },
-  { code: "GE-CE",   name: "Civil Engineering" },
-  { code: "GE-BIO",  name: "Bio Engineering" },
-  { code: "GE-DSAI", name: "Data Science & AI" },
+  { code: "GE-AIR",  name: "AI and Robotics" },
+  { code: "GE-MEC",  name: "Mechatronics" },
+  { code: "GE-COM",  name: "Communication Technology" },
+  { code: "GE-OPEN", name: "Open Specialisation" },
+  { code: "GE-FIN",  name: "Fintech" },
 ];
 
 function BranchCurriculum({ branch, onBack, reduce }) {
@@ -354,7 +355,7 @@ function BranchCurriculum({ branch, onBack, reduce }) {
   const [batches, setBatches]       = useState(FALLBACK_BATCHES);
   const [semesters, setSemesters]   = useState([]);
   const [loading, setLoading]       = useState(true);
-  const [geSpec, setGeSpec]         = useState(GE_SPECIALISATIONS[0].code);
+  const [geSpec, setGeSpec]         = useState(null);
 
   const isGE = branch.id === "GE";
 
@@ -389,7 +390,9 @@ function BranchCurriculum({ branch, onBack, reduce }) {
     return () => { cancelled = true; };
   }, [branch.id, isGE, geSpec, batch]);
 
-  const totalCredits = semesters.reduce((t, s) => t + s.courses.reduce((a, c) => a + c.credits, 0), 0);
+  /* semesterCredits counts a "choose 1" basket once and ignores rows the PDF
+     left blank, so this matches the Total printed on each semester table. */
+  const totalCredits = semesters.reduce((t, s) => t + semesterCredits(s), 0);
   const displayBatches = batches.length ? batches : FALLBACK_BATCHES;
   // GE requires an explicit batch pick; other branches default to the latest.
   const activeBatch    = isGE ? batch : (batch || displayBatches[0]);
@@ -510,47 +513,88 @@ function BranchCurriculum({ branch, onBack, reduce }) {
             <div style={{ padding: "40px 0", textAlign: "center", color: C.textMuted, fontSize: 14 }}>
               No curriculum data available for this branch yet.
             </div>
-          ) : semesters.map((sem) => (
-            <div key={sem.num} style={S.semBlock}>
-              <div style={S.semHeader}>
-                <span style={S.semNum}>Semester {sem.num}</span>
-                <span style={{ ...S.semCredits, color: branch.color }}>
-                  {sem.courses.reduce((s, c) => s + c.credits, 0)} credits
-                </span>
-              </div>
-              <div style={S.tableScroll}>
-                <table style={S.table}>
-                  <thead>
-                    <tr>
-                      <th style={S.th}>Code</th>
-                      <th style={{ ...S.th, textAlign: "left" }}>Course Title</th>
-                      {isGE && <th style={S.th}>Specialisation</th>}
-                      <th style={S.th}>Credits</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sem.courses.map((c) => (
-                      <tr
-                        key={c.code}
-                        style={{ ...S.tr, cursor: c.id ? "pointer" : "default" }}
-                        onClick={() => c.id && navigate(`/courses/${c.id}`)}
-                        title={c.id ? "View course details" : undefined}
-                      >
-                        <td style={{ ...S.td, ...S.codeCell, color: branch.color }}>{c.code}</td>
-                        <td style={{ ...S.td, fontWeight: 500 }}>{c.title}</td>
-                        {isGE && (
-                          <td style={{ ...S.td, ...S.codeCell, fontSize: 11, color: c.specialisation ? branch.color : C.textDim }}>
-                            {c.specialisation || "—"}
-                          </td>
-                        )}
-                        <td style={{ ...S.td, ...S.creditsCell }}>{c.credits}</td>
+          ) : semesters.map((sem) => {
+            /* One column count, used by the basket banner's colSpan too. */
+            const cols = 3 + (isGE ? 1 : 0) + (mobile ? 0 : 2);
+            return (
+              <div key={sem.num} style={S.semBlock}>
+                <div style={S.semHeader}>
+                  <span style={S.semNum}>Semester {sem.num}</span>
+                  <span style={{ ...S.semCredits, color: branch.color }}>
+                    {semesterCredits(sem)} credits
+                  </span>
+                </div>
+                <div style={S.tableScroll}>
+                  <table style={S.table}>
+                    <thead>
+                      <tr>
+                        {!mobile && <th style={S.th}>Category</th>}
+                        <th style={S.th}>Code</th>
+                        <th style={{ ...S.th, textAlign: "left" }}>Course Title</th>
+                        {isGE && <th style={S.th}>Specialisation</th>}
+                        {!mobile && <th style={S.th}>L-T-P-C</th>}
+                        <th style={S.th}>Credits</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {sem.courses.map((c, i) => {
+                        const group = c.choiceGroup || null;
+                        /* Banner once per basket, above its first option. */
+                        const opensGroup =
+                          group && sem.courses[i - 1]?.choiceGroup?.id !== group.id;
+
+                        return (
+                          <Fragment key={`${sem.num}-${c.code || "row"}-${i}`}>
+                            {opensGroup && (
+                              <tr style={S.tr}>
+                                <td colSpan={cols} style={S.groupBanner}>
+                                  <span style={{ color: branch.color }}>{group.label}</span>
+                                  {" · choose "}{group.choose}
+                                  {group.credits != null && ` · ${group.credits} credits`}
+                                </td>
+                              </tr>
+                            )}
+                            <tr
+                              style={{
+                                ...S.tr,
+                                cursor: c.id ? "pointer" : "default",
+                                ...(group ? { background: tint(branch.color, 0.035) } : null),
+                              }}
+                              onClick={() => c.id && navigate(`/courses/${c.id}`)}
+                              title={c.id ? "View course details" : undefined}
+                            >
+                              {!mobile && (
+                                <td style={{ ...S.td, ...S.categoryCell }}>{c.category || "—"}</td>
+                              )}
+                              <td style={{ ...S.td, ...S.codeCell, color: branch.color }}>
+                                {c.code || "—"}
+                              </td>
+                              <td style={{ ...S.td, fontWeight: 500 }}>
+                                {c.title}
+                                {c.isOptional && <span style={S.optionalTag}>optional</span>}
+                              </td>
+                              {isGE && (
+                                <td style={{ ...S.td, ...S.codeCell, fontSize: 11, color: c.specialisation ? branch.color : C.textDim }}>
+                                  {c.specialisation || "—"}
+                                </td>
+                              )}
+                              {!mobile && (
+                                <td style={{ ...S.td, ...S.ltpcCell }}>{c.ltpc || "—"}</td>
+                              )}
+                              {/* null credits means the PDF printed none — never show a 0. */}
+                              <td style={{ ...S.td, ...S.creditsCell }}>
+                                {c.credits == null ? "—" : c.credits}
+                              </td>
+                            </tr>
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </>
       )}
     </div>
@@ -717,4 +761,10 @@ const S = {
   td: { padding: "12px 20px", fontSize: 14, color: C.navyMid },
   codeCell: { fontWeight: 700, fontSize: 12, letterSpacing: 0.5, textAlign: "center" },
   creditsCell: { textAlign: "center", fontWeight: 700, color: C.navyDeep },
+  categoryCell: { textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: C.textDim, whiteSpace: "nowrap" },
+  ltpcCell: { textAlign: "center", fontSize: 12, fontWeight: 600, color: C.textMuted, whiteSpace: "nowrap" },
+
+  /* "choose 1" basket: banner above the options, options tinted underneath */
+  groupBanner: { padding: "8px 20px", fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: C.textDim, background: "#fafbfe" },
+  optionalTag: { marginLeft: 8, padding: "2px 7px", borderRadius: 999, background: C.offWhite, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: C.textDim, whiteSpace: "nowrap" },
 };

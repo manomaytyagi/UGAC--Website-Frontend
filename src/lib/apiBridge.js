@@ -28,6 +28,7 @@
      resourcesApi.presignedUrl(key)  ResourcesPage
      branchMeta(code)                FacultyAdvisers
      batchLabel(value)
+     semesterCredits(semester)       CurriculumPage  (choose-1 baskets count once)
      submitFeedback(payload)         Community > Feedback (opt-in, see below)
 
    CONFIGURATION (Vite env vars, all optional)
@@ -39,6 +40,8 @@
      VITE_FORMSPREE_ID      enables the feedback form.
      VITE_FEEDBACK_ENDPOINT overrides Formspree with your own POST endpoint.
    =========================================================================== */
+
+import LOCAL_CURRICULA from "../lib/CurriculumData.json";
 
 const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
 
@@ -1078,13 +1081,14 @@ function extractUrl(payload) {
    12. Curriculum
    =========================================================================== */
 
+/* The five General Engineering specialisations the compiled curriculum
+   actually publishes. Fintech and Open Specialisation start with B24. */
 const GE_SPECIALISATIONS = {
-  "GE-CS": "Computer Science",
-  "GE-EE": "Electrical Engineering",
-  "GE-ME": "Mechanical Engineering",
-  "GE-CE": "Civil Engineering",
-  "GE-BIO": "Bio Engineering",
-  "GE-DSAI": "Data Science & AI",
+  "GE-AIR": "AI and Robotics",
+  "GE-MEC": "Mechatronics",
+  "GE-COM": "Communication Technology",
+  "GE-OPEN": "Open Specialisation",
+  "GE-FIN": "Fintech",
 };
 
 /** True if a stored specialisation string matches the requested one. */
@@ -1127,6 +1131,180 @@ function courseSpecialisation(link, curriculum) {
     pick(link.extra_data || {}, "specialisation", "specialization") ||
     pick(curriculum, "specialization", "specialisation")
   );
+}
+
+/* ---------------------------------------------------------------------------
+   12b. Local semester tables (src/data/curriculum.json)
+
+   The eight semester tables are transcribed from the compiled DC curriculum
+   PDFs, because the backend does not carry them yet. Everything else about a
+   curriculum — the credit distribution behind the hover card, the elective
+   baskets — still comes from the API and is untouched by this layer.
+
+   Flip LOCAL_SEMESTERS_WIN to false once the backend's /curriculum/{id}/courses
+   rows are trustworthy; the JSON then only fills gaps the API does not answer.
+   ------------------------------------------------------------------------- */
+
+const LOCAL_SEMESTERS_WIN = true;
+
+const localKey = (branchCode, batch, spec) =>
+  `${String(branchCode || "").toUpperCase()}|${String(batch ?? "")}` +
+  `|${String(spec || "").toUpperCase()}`;
+
+/* "CSE|2023|" -> entry, built once at module load. General Engineering ships
+   one entry per specialisation per batch, so the key carries it. */
+const LOCAL_INDEX = (() => {
+  const index = new Map();
+  for (const entry of LOCAL_CURRICULA?.curricula || []) {
+    const code = resolveBranchCode(entry.branch) || String(entry.branch || "").toUpperCase();
+    if (!code) continue;
+    index.set(
+      localKey(code, entry.batch, entry.specialisationCode),
+      { ...entry, branch: code }
+    );
+  }
+  return index;
+})();
+
+/** True when a local entry is the requested specialisation. */
+function localSpecMatches(entry, wanted) {
+  if (!wanted) return true;
+  if (!entry.specialisationCode && !entry.specialisation) return false;
+  const want = String(wanted).toUpperCase();
+  if (String(entry.specialisationCode || "").toUpperCase() === want) return true;
+  return specialisationMatches(entry.specialisation, wanted);
+}
+
+/** Batch years with a local table for this branch, newest first. */
+function localBatchesFor(branchCode, specialisation) {
+  const code = resolveBranchCode(branchCode);
+  return [...LOCAL_INDEX.values()]
+    .filter((e) => e.branch === code && localSpecMatches(e, specialisation))
+    .map((e) => String(e.batch))
+    .sort((a, b) => Number(b) - Number(a));
+}
+
+/**
+ * The local entry for a branch + batch. With no batch, the newest one on file.
+ * Specialisation-bearing branches (GE) key on "CSE|2023|GE-CS" style entries;
+ * an entry may declare `specialisation` and it is matched leniently.
+ */
+function findLocalCurriculum(branchCode, batchYear, specialisation) {
+  const code = resolveBranchCode(branchCode);
+  if (!code) return null;
+
+  let pool = [...LOCAL_INDEX.values()].filter((e) => e.branch === code);
+  if (!pool.length) return null;
+
+  if (specialisation) {
+    pool = pool.filter((e) => localSpecMatches(e, specialisation));
+    if (!pool.length) return null;
+  }
+
+  if (batchYear) {
+    const exact = pool.find((e) => String(e.batch) === String(batchYear));
+    if (exact) return exact;
+    return null; // asked for a batch we have not transcribed yet
+  }
+  return [...pool].sort((a, b) => Number(b.batch) - Number(a.batch))[0] || null;
+}
+
+/**
+ * JSON rows -> the exact course shape CurriculumPage renders. `codeIndex` is an
+ * optional Map of upper-cased course code -> API course row, used only to
+ * recover the course id so a row stays clickable through to /courses/:id.
+ */
+function shapeLocalSemesters(entry, codeIndex) {
+  return (entry?.semesters || [])
+    .map((sem) => ({
+      num: toNumber(sem.num),
+      statedTotal: sem.statedTotal == null ? null : toNumber(sem.statedTotal),
+      statedTotalText: sem.statedTotalText || null,
+      /* the printed Total disagrees with its own rows in the source PDF */
+      statedTotalConflict: Boolean(sem.statedTotalConflict),
+      courses: (sem.courses || []).map((c) => {
+        const code = clean(c.code);
+        const match = code ? codeIndex?.get(code.toUpperCase()) : null;
+        return {
+          id: match?.id || null,
+          code: code || "—",
+          title: clean(c.title) || "Unknown course",
+          /* null is meaningful: the PDF printed no credit value for this row. */
+          credits: c.credits == null ? null : toNumber(c.credits),
+          ltpc: clean(c.ltpc),
+          category: clean(c.category),
+          isOptional: Boolean(c.isOptional),
+          choiceGroup: c.choiceGroup || null,
+          basketId: c.choiceGroup?.id ?? null,
+          specialisation:
+            clean(c.specialisation) || clean(entry.specialisationCode) || null,
+        };
+      }),
+    }))
+    .sort((a, b) => a.num - b.num);
+}
+
+/**
+ * Credits for one semester. A "choose 1" basket contributes its group credits
+ * once however many options are listed, and a row with no printed credit
+ * contributes nothing — so the figure always matches the PDF's Total row.
+ */
+export function semesterCredits(semester) {
+  const counted = new Set();
+  let total = 0;
+  for (const course of semester?.courses || []) {
+    const group = course.choiceGroup;
+    if (group?.id) {
+      if (counted.has(group.id)) continue;
+      counted.add(group.id);
+      total += toNumber(group.credits);
+    } else {
+      total += toNumber(course.credits);
+    }
+  }
+  return total;
+}
+
+/** Course code -> API course row, so local rows can pick up real course ids. */
+async function loadCourseCodeIndex() {
+  const rows = await loadCourses();
+  const index = new Map();
+  for (const row of rows) {
+    const code = clean(row.code);
+    if (code) index.set(code.toUpperCase(), row);
+  }
+  return index;
+}
+
+/** Specialisation labels this branch publishes locally. */
+function localSpecialisationsFor(branchCode) {
+  const code = resolveBranchCode(branchCode);
+  return [
+    ...new Set(
+      [...LOCAL_INDEX.values()]
+        .filter((e) => e.branch === code && e.specialisation)
+        .map((e) => e.specialisation)
+    ),
+  ];
+}
+
+/** A complete curriculum payload built from JSON alone, for when the API is down. */
+function localOnlyPayload(branchCode, { batchYear, specialisation } = {}) {
+  const entry = findLocalCurriculum(branchCode, batchYear, specialisation);
+  if (!entry) return null;
+  const code = resolveBranchCode(branchCode);
+  return {
+    dept: branchCode,
+    branch: code,
+    name: clean(entry.name) || BRANCH_META[code]?.name || branchCode,
+    specialisation: clean(entry.specialisation) || null,
+    specialisations: localSpecialisationsFor(branchCode),
+    semesters: shapeLocalSemesters(entry, null),
+    /* The credit distribution is the API's to serve; nothing is invented here. */
+    credits: { total: 0, rows: [] },
+    batches: localBatchesFor(branchCode, specialisation),
+    source: "local",
+  };
 }
 
 /* ===========================================================================
@@ -1383,6 +1561,10 @@ export const api = {
    * @returns {{data: {name, semesters, credits, batches, specialisations}|null, source: string}}
    */
   async curriculum(branchCode, fallbackData, { batchYear, specialisation } = {}) {
+    /* If the API cannot answer at all, a JSON-only payload is still a real
+       curriculum, so it is preferred over the caller's fallback. */
+    const offline = localOnlyPayload(branchCode, { batchYear, specialisation });
+
     return withFallback(async () => {
       const [curricula, branchIndex] = await Promise.all([
         getPaged("/curriculum/"),
@@ -1471,12 +1653,27 @@ export const api = {
           ),
         }));
 
-      /* 5. Every batch year on offer for this branch, newest first. */
+      /* 5. Every batch year on offer for this branch, newest first — the union
+            of what the API carries and what has been transcribed locally, so a
+            transcribed batch still gets a tab on the page. */
       const batches = [
-        ...new Set(
-          candidates.map((c) => (c.batch_year == null ? "" : String(c.batch_year))).filter(Boolean)
-        ),
+        ...new Set([
+          ...candidates.map((c) => (c.batch_year == null ? "" : String(c.batch_year))),
+          ...localBatchesFor(code, specialisation),
+        ].filter(Boolean)),
       ].sort((a, b) => Number(b) - Number(a));
+
+      /* 6. Overlay the local semester tables. The requested batch is used, not
+            the batch the API happened to select, so the table on screen always
+            matches the year tab the user pressed. */
+      const wantedBatch = batchYear || String(selected.batch_year ?? "") || null;
+      const localEntry = findLocalCurriculum(code, wantedBatch, specialisation);
+      let finalSemesters = semesters;
+
+      if (localEntry && (LOCAL_SEMESTERS_WIN || !semesters.length)) {
+        const codeIndex = await loadCourseCodeIndex().catch(() => null);
+        finalSemesters = shapeLocalSemesters(localEntry, codeIndex);
+      }
 
       return {
         dept: branchCode,
@@ -1484,11 +1681,12 @@ export const api = {
         name: clean(selected.name) || BRANCH_META[code]?.name || branchCode,
         specialisation: clean(selected.specialization),
         specialisations,
-        semesters,
+        semesters: finalSemesters,
         credits: creditBreakdown(selected),
         batches,
+        source: localEntry && finalSemesters !== semesters ? "local-semesters" : "live",
       };
-    }, fallbackData);
+    }, offline || fallbackData);
   },
 
   /** Elective baskets for a branch/batch, or the first curriculum on file. */

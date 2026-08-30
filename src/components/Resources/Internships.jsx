@@ -19,7 +19,7 @@ const FLOW = {
   getOffer: {
     kind: "action",
     title: "Get Offer Letter",
-    meta: ["⏰ Off-campus internship? Report it to CnP within 5 working days of the offer letter being issued."],
+    meta: ["Off-campus internship? Report it to CnP within 5 working days of the offer letter being issued."],
     body: "Secure the official offer letter — you'll attach it at later steps.",
     next: "duration",
   },
